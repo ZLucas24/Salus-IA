@@ -8,7 +8,7 @@
     "saturacao": 93
   },
   "respostas": {
-    "P01": "Dor forte no peito e falta de ar",
+    "P01": "Dor forte no peito há 2 horas e falta de ar",
     "P02": {"valor": 2, "unidade": "horas"},
     "P03": true,
     "P04": {"resposta": true, "escala": 8},

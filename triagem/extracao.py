@@ -1,28 +1,43 @@
-"""Extração de queixa e sinais a partir do relato breve (P01)."""
+"""Interface de extração a partir do relato breve (P01).
 
-from dataclasses import dataclass
+A IA (ou o mock) só entende linguagem e extrai dados; nunca decide gravidade.
+Toda chamada a modelo fica atrás de `Extrator`, e as implementações são
+intercambiáveis.
+"""
 
-from triagem.schema import Sinal
-from triagem.sinais import NomeSinal, Origem, Status
+from abc import ABC, abstractmethod
+
+from pydantic import BaseModel, Field
+
+from triagem.schema import AlergiasMedicamentosas, Duracao, Sinal
+
+NOME_PADRAO = "mock"
 
 
-@dataclass
-class Extracao:
-    queixa_principal: str
-    sinais: list[Sinal]
+class Extracao(BaseModel):
+    """O que o extrator devolve: só o que o relato cita.
+
+    `sinais` contém apenas sinais citados (presente ou negado); o código
+    completa o resto como nao_mencionado.
+    """
+
+    queixa_principal: str | None = None
+    duracao: Duracao | None = None
+    sinais: list[Sinal] = Field(default_factory=list)
+    alergias_medicamentosas: AlergiasMedicamentosas | None = None
 
 
-def extrair(relato: str, mock: bool = True) -> Extracao:
-    """Só o modo mock existe por enquanto: devolve valores fixos e válidos,
-    independentes do texto. A IA só extrai dados; nunca decide gravidade."""
-    if not mock:
-        raise NotImplementedError("extração real ainda não implementada; use --mock")
-    return Extracao(
-        queixa_principal="dor no peito",
-        sinais=[
-            Sinal(nome=NomeSinal.DOR, status=Status.PRESENTE,
-                  origem=Origem.EXTRAIDO_DO_RELATO),
-            Sinal(nome=NomeSinal.DISPNEIA, status=Status.PRESENTE,
-                  origem=Origem.EXTRAIDO_DO_RELATO),
-        ],
-    )
+class Extrator(ABC):
+    nome: str
+
+    @abstractmethod
+    def extrair(self, relato: str) -> Extracao:
+        """Extrai queixa, duração e sinais citados no texto do relato."""
+
+
+def criar_extrator(nome: str) -> Extrator:
+    if nome == "mock":
+        from triagem.extrator_mock import MockExtrator
+
+        return MockExtrator()
+    raise ValueError(f"extrator desconhecido: {nome}")

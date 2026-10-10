@@ -65,6 +65,7 @@ class SaidaTriagem(BaseModel):
     pontuacao: int = 0
     pontuacao_provisoria: bool = True
     versao_schema: str = VERSAO_SCHEMA
+    extrator: str
 
     @model_validator(mode="after")
     def _sem_sinais_duplicados(self):

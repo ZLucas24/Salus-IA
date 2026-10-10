@@ -5,7 +5,7 @@ import logging
 
 from pydantic import ValidationError
 
-from triagem.extracao import extrair
+from triagem.extracao import Extrator
 from triagem.pontuacao import pontuar
 from triagem.questionario import ErroResposta, carregar_questionario, interpretar
 from triagem.schema import AlergiasMedicamentosas, DadosAtendente, Resposta, SaidaTriagem, Sinal
@@ -36,7 +36,7 @@ def _bruto_para_texto(v) -> str:
     return v if isinstance(v, str) else json.dumps(v, ensure_ascii=False)
 
 
-def processar_ficha(ficha: dict, mock: bool = True) -> SaidaTriagem:
+def processar_ficha(ficha: dict, extrator: Extrator) -> SaidaTriagem:
     if not isinstance(ficha, dict):
         raise FichaInvalida(["a ficha deve ser um objeto JSON"])
     erros: list[str] = []
@@ -86,9 +86,17 @@ def processar_ficha(ficha: dict, mock: bool = True) -> SaidaTriagem:
     queixa = None
     extraidos: dict[NomeSinal, Sinal] = {}
     if relato:
-        ext = extrair(relato, mock=mock)
+        ext = extrator.extrair(relato)
         queixa = ext.queixa_principal
-        extraidos = {s.nome: s for s in ext.sinais}
+        extraidos = {
+            s.nome: s.model_copy(update={"origem": Origem.EXTRAIDO_DO_RELATO})
+            for s in ext.sinais
+            if s.status != Status.NAO_MENCIONADO  # o extrator só informa o que o relato cita
+        }
+        if duracao is None:
+            duracao = ext.duracao
+        if alergias.status == Status.NAO_MENCIONADO and ext.alergias_medicamentosas:
+            alergias = ext.alergias_medicamentosas
 
     sinais: list[Sinal] = []
     for nome in NomeSinal:
@@ -124,6 +132,7 @@ def processar_ficha(ficha: dict, mock: bool = True) -> SaidaTriagem:
         dados_atendente=dados,
         perguntas_pendentes=pendentes,
         pontuacao_provisoria=True,
+        extrator=extrator.nome,
     )
     saida.pontuacao = pontuar(saida)
     return saida

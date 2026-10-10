@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 from triagem.entrevista import FichaInvalida, processar_ficha
+from triagem.extracao import NOME_PADRAO, criar_extrator
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -20,13 +21,9 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="triagem", description="Salus IA: triagem (somente dados simulados)")
     parser.add_argument("ficha", type=Path, help="arquivo JSON com a ficha do paciente")
-    parser.add_argument("--mock", action="store_true",
-                        help="usa a extração simulada (sem API)")
+    parser.add_argument("--extrator", choices=["mock"], default=NOME_PADRAO,
+                        help="implementação do extrator (padrão: %(default)s)")
     args = parser.parse_args(argv)
-
-    if not args.mock:
-        log.error("apenas o modo --mock está disponível por enquanto")
-        return 2
 
     try:
         with open(args.ficha, encoding="utf-8-sig") as f:
@@ -39,7 +36,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     try:
-        saida = processar_ficha(ficha, mock=True)
+        saida = processar_ficha(ficha, criar_extrator(args.extrator))
     except FichaInvalida as e:
         log.error("ficha inválida (%d problema(s)):", len(e.erros))
         for erro in e.erros:
