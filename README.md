@@ -81,7 +81,7 @@ python -m triagem.relato "dor no peito há 2 horas" --extrator ollama   # exige 
 
 Devolve em JSON a queixa, a duração e só os sinais citados, com `pontuacao` fixa
 (stub) e `pontuacao_provisoria: true`. O extrator `ollama` usa `TRIAGEM_MODELO`
-(padrão `llama3.2:3b`) e `OLLAMA_HOST` do `.env`; se o servidor não estiver
+(padrão `llama3.1:8b`) e `OLLAMA_HOST` do `.env`; se o servidor não estiver
 disponível, o comando falha com mensagem no stderr.
 
 ### Extratores

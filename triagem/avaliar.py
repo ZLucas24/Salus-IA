@@ -1,6 +1,6 @@
 """Avalia extratores Ollama contra relatos simulados com gabarito.
 
-Uso: python -m triagem.avaliar --modelo llama3.2:3b --modelo qwen2.5:7b [--detalhe]
+Uso: python -m triagem.avaliar --modelo llama3.1:8b --modelo qwen2.5:7b [--detalhe]
 
 Métricas por modelo, sobre os sinais do gabarito:
   acertos   sinal com o status esperado

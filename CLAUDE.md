@@ -18,4 +18,4 @@ Python 3.11+. Pacote `triagem`, executado com `python -m triagem`.
 
 ## Modelo padrão
 
-`TRIAGEM_MODELO` (padrão `llama3.2:3b`), servido via Ollama (`OLLAMA_HOST`).
+`TRIAGEM_MODELO` (padrão `llama3.1:8b`), servido via Ollama (`OLLAMA_HOST`).

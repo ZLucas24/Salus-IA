@@ -15,7 +15,7 @@ from triagem.extracao import Extracao, Extrator
 from triagem.schema import AlergiasMedicamentosas, Duracao, Sinal
 from triagem.sinais import NomeSinal, Origem, Status
 
-MODELO_PADRAO = "llama3.2:3b"
+MODELO_PADRAO = "llama3.1:8b"
 LIMITE_TOKENS = 600  # evita geração sem fim (JSON truncado vira ErroExtracao)
 TIMEOUT_S = 120
 
