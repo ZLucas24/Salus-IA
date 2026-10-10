@@ -40,4 +40,8 @@ def criar_extrator(nome: str) -> Extrator:
         from triagem.extrator_mock import MockExtrator
 
         return MockExtrator()
+    if nome == "ollama":
+        from triagem.extrator_ollama import OllamaExtrator
+
+        return OllamaExtrator()
     raise ValueError(f"extrator desconhecido: {nome}")

@@ -72,6 +72,18 @@ python -m triagem exemplos/ficha_exemplo.json --extrator mock   # igual ao anter
 
 Para salvar a saída: `python -m triagem ficha.json > saida.json`.
 
+### Testar só o relato (texto livre)
+
+```bash
+python -m triagem.relato "dor no peito há 2 horas"
+python -m triagem.relato "dor no peito há 2 horas" --extrator ollama   # exige Ollama rodando
+```
+
+Devolve em JSON a queixa, a duração e só os sinais citados, com `pontuacao` fixa
+(stub) e `pontuacao_provisoria: true`. O extrator `ollama` usa `TRIAGEM_MODELO`
+(padrão `llama3.2:3b`) e `OLLAMA_HOST` do `.env`; se o servidor não estiver
+disponível, o comando falha com mensagem no stderr.
+
 ### Extratores
 
 A leitura do relato (P01) fica atrás da interface `Extrator`

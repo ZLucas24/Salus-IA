@@ -10,18 +10,22 @@ from triagem.entrevista import FichaInvalida, processar_ficha
 from triagem.extracao import NOME_PADRAO, criar_extrator
 
 
-def main(argv: list[str] | None = None) -> int:
-    # UTF-8 mesmo no terminal do Windows (stdout e stderr)
+def configurar_io() -> None:
+    """UTF-8 mesmo no terminal do Windows; logs somente no stderr."""
     for fluxo in (sys.stdout, sys.stderr):
         fluxo.reconfigure(encoding="utf-8")
     logging.basicConfig(stream=sys.stderr, level=logging.INFO,
                         format="[%(levelname)s] %(message)s")
+
+
+def main(argv: list[str] | None = None) -> int:
+    configurar_io()
     log = logging.getLogger("triagem")
 
     parser = argparse.ArgumentParser(
         prog="triagem", description="Salus IA: triagem (somente dados simulados)")
     parser.add_argument("ficha", type=Path, help="arquivo JSON com a ficha do paciente")
-    parser.add_argument("--extrator", choices=["mock"], default=NOME_PADRAO,
+    parser.add_argument("--extrator", choices=["mock", "ollama"], default=NOME_PADRAO,
                         help="implementação do extrator (padrão: %(default)s)")
     args = parser.parse_args(argv)
 
