@@ -1,0 +1,25 @@
+{
+  "dados_atendente": {
+    "idade": 58,
+    "temperatura": 36.8,
+    "frequencia_cardiaca": 102,
+    "pressao_sistolica": 150,
+    "pressao_diastolica": 95,
+    "saturacao": 93
+  },
+  "respostas": {
+    "P01": "Dor forte no peito e falta de ar",
+    "P02": {"valor": 2, "unidade": "horas"},
+    "P03": true,
+    "P04": {"resposta": true, "escala": 8},
+    "P05": "peito",
+    "P06": true,
+    "P07": {"ha_sangramento": false},
+    "P08": {"desmaiou_ou_confuso": false, "convulsao": false},
+    "P09": {"resposta": false},
+    "P10": false,
+    "P11": false,
+    "P12": {"gravida": false, "doenca_cronica": ["pressao"]},
+    "P13": {"resposta": false}
+  }
+}

@@ -2,7 +2,7 @@
 
 from enum import Enum
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from triagem.sinais import NomeSinal, Origem, Status
 
@@ -41,6 +41,8 @@ class AlergiasMedicamentosas(BaseModel):
 
 
 class DadosAtendente(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     idade: int = Field(ge=0, le=130)
     temperatura: float | None = None
     frequencia_cardiaca: int | None = Field(default=None, gt=0)
