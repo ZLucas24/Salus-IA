@@ -88,3 +88,17 @@ def test_ollama_extrator_rejeita_resposta_fora_do_formato(conteudo):
 def test_ollama_extrator_converte_falha_de_conexao():
     with pytest.raises(ErroExtracao):
         OllamaExtrator(cliente=ClienteFalso(erro=ConnectionError("sem servidor"))).extrair("dor")
+
+
+def test_ollama_descarta_negado_inventado_quando_relato_nao_tem_negacao():
+    cliente = ClienteFalso(json.dumps({
+        "sinais": [{"nome": "dor", "status": "presente"},
+                   {"nome": "febre", "status": "negado"}]}))
+    ext = OllamaExtrator(cliente=cliente).extrair("dor no peito há 2 horas")
+    assert {s.nome for s in ext.sinais} == {NomeSinal.DOR}
+
+
+def test_ollama_mantem_negado_quando_relato_nega():
+    cliente = ClienteFalso(json.dumps({"sinais": [{"nome": "febre", "status": "negado"}]}))
+    ext = OllamaExtrator(cliente=cliente).extrair("tosse, não tenho febre")
+    assert [(s.nome, s.status) for s in ext.sinais] == [(NomeSinal.FEBRE, Status.NEGADO)]

@@ -6,6 +6,8 @@ gravidade. A saída é validada contra um schema fechado antes de ser aceita.
 
 import json
 import os
+import re
+import unicodedata
 
 from pydantic import BaseModel, ValidationError
 
@@ -14,6 +16,8 @@ from triagem.schema import AlergiasMedicamentosas, Duracao, Sinal
 from triagem.sinais import NomeSinal, Origem, Status
 
 MODELO_PADRAO = "llama3.2:3b"
+LIMITE_TOKENS = 600  # evita geração sem fim (JSON truncado vira ErroExtracao)
+TIMEOUT_S = 120
 
 INSTRUCOES = f"""Você extrai dados de um relato curto de paciente, em português.
 Responda SOMENTE com JSON no formato pedido. Regras:
@@ -52,6 +56,15 @@ EXEMPLOS = [
 ]
 
 
+_NEGACAO = re.compile(r"\b(sem|nao|nada|nunca|nem|nenhum|nenhuma|ausencia)\b")
+
+
+def _tem_negacao(texto: str) -> bool:
+    base = unicodedata.normalize("NFD", texto.lower())
+    base = "".join(c for c in base if not unicodedata.combining(c))
+    return bool(_NEGACAO.search(base))
+
+
 class ErroExtracao(RuntimeError):
     """O modelo não respondeu ou respondeu algo fora do formato."""
 
@@ -77,7 +90,8 @@ class OllamaExtrator(Extrator):
         if cliente is None:
             import ollama
 
-            cliente = ollama.Client(host=host or os.environ.get("OLLAMA_HOST") or None)
+            cliente = ollama.Client(host=host or os.environ.get("OLLAMA_HOST") or None,
+                                    timeout=TIMEOUT_S)
         self.cliente = cliente
 
     @staticmethod
@@ -95,7 +109,7 @@ class OllamaExtrator(Extrator):
                 model=self.modelo,
                 messages=self._mensagens(relato),
                 format=_Resposta.model_json_schema(),
-                options={"temperature": 0},
+                options={"temperature": 0, "num_predict": LIMITE_TOKENS},
             )
             bruto = resp["message"]["content"]
         except Exception as e:  # rede, modelo ausente etc.
@@ -105,11 +119,14 @@ class OllamaExtrator(Extrator):
         except ValidationError as e:
             raise ErroExtracao(f"resposta do modelo fora do formato: {e}") from e
 
+        # "negado" só vale se o relato traz alguma negação; modelos pequenos
+        # costumam inventar negativas para sinais que o texto nem menciona.
+        aceita_negado = _tem_negacao(relato)
         sinais = {
             s.nome: Sinal(nome=s.nome, status=s.status, valor=s.valor,
                           origem=Origem.EXTRAIDO_DO_RELATO)
             for s in r.sinais
-            if s.status != Status.NAO_MENCIONADO
+            if s.status == Status.PRESENTE or (s.status == Status.NEGADO and aceita_negado)
         }
         alergias = r.alergias_medicamentosas
         if alergias and alergias.status == Status.NAO_MENCIONADO:
