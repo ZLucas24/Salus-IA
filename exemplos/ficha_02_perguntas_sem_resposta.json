@@ -1,0 +1,13 @@
+{
+  "dados_atendente": {
+    "idade": 41
+  },
+  "respostas": {
+    "P01": "Dor de barriga desde ontem",
+    "P02": {
+      "valor": 1,
+      "unidade": "dias"
+    },
+    "P06": false
+  }
+}

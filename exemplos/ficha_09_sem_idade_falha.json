@@ -1,0 +1,34 @@
+{
+  "dados_atendente": {},
+  "respostas": {
+    "P01": "Dor de garganta leve e tosse",
+    "P02": {
+      "valor": 3,
+      "unidade": "dias"
+    },
+    "P03": false,
+    "P04": {
+      "resposta": false
+    },
+    "P06": false,
+    "P07": {
+      "ha_sangramento": false
+    },
+    "P08": {
+      "desmaiou_ou_confuso": false,
+      "convulsao": false
+    },
+    "P09": {
+      "resposta": false
+    },
+    "P10": false,
+    "P11": false,
+    "P12": {
+      "gravida": false,
+      "doenca_cronica": []
+    },
+    "P13": {
+      "resposta": false
+    }
+  }
+}

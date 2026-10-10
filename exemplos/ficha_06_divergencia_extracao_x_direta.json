@@ -1,0 +1,38 @@
+{
+  "dados_atendente": {
+    "idade": 34
+  },
+  "respostas": {
+    "P01": "Dor no peito e falta de ar há 2 horas",
+    "P02": {
+      "valor": 3,
+      "unidade": "dias"
+    },
+    "P03": false,
+    "P04": {
+      "resposta": true,
+      "escala": 5
+    },
+    "P06": false,
+    "P07": {
+      "ha_sangramento": false
+    },
+    "P08": {
+      "desmaiou_ou_confuso": false,
+      "convulsao": false
+    },
+    "P09": {
+      "resposta": false
+    },
+    "P10": false,
+    "P11": false,
+    "P12": {
+      "gravida": false,
+      "doenca_cronica": []
+    },
+    "P13": {
+      "resposta": false
+    },
+    "P05": "peito"
+  }
+}
