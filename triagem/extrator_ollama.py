@@ -4,6 +4,7 @@ O modelo só entende o texto e devolve dados estruturados; nunca decide
 gravidade. A saída é validada contra um schema fechado antes de ser aceita.
 """
 
+import json
 import os
 
 from pydantic import BaseModel, ValidationError
@@ -22,7 +23,33 @@ Responda SOMENTE com JSON no formato pedido. Regras:
 - sinais: inclua SOMENTE sinais citados no relato, com status "presente" ou "negado" (ex.: "sem febre" = negado). Nunca invente.
   Nomes permitidos: {", ".join(n.value for n in NomeSinal)}.
   "valor" é opcional (nota da dor, temperatura em °C, local da dor).
-- alergias_medicamentosas: só se o relato citar alergia a medicamento; senão null."""
+- "sem X", "não tenho X" e "nunca teve X" significam status "negado", NUNCA "presente".
+- "ontem" = 1 dia; "esta manhã" = poucas horas. Converta para número + unidade.
+- alergias_medicamentosas: se o relato citar alergia a medicamento, status "presente" e os nomes; se negar, status "negado"; se não falar de alergia, null."""
+
+
+# Exemplos (relato -> JSON esperado) para ancorar negações, duração e alergia.
+EXEMPLOS = [
+    ("tosse seca há 3 dias, sem febre",
+     {"queixa_principal": "tosse seca",
+      "duracao": {"valor": 3, "unidade": "dias"},
+      "sinais": [{"nome": "febre", "status": "negado"}],
+      "alergias_medicamentosas": None}),
+    ("falta de ar e dor forte no peito desde ontem, alérgico a penicilina",
+     {"queixa_principal": "falta de ar e dor no peito",
+      "duracao": {"valor": 1, "unidade": "dias"},
+      "sinais": [{"nome": "dispneia", "status": "presente"},
+                 {"nome": "dor", "status": "presente"},
+                 {"nome": "local_dor", "status": "presente", "valor": "peito"}],
+      "alergias_medicamentosas": {"status": "presente", "medicamentos": ["penicilina"]}}),
+    ("barriga doendo há 5 horas, não tenho alergia a remédio, não bati nem caí",
+     {"queixa_principal": "dor na barriga",
+      "duracao": {"valor": 5, "unidade": "horas"},
+      "sinais": [{"nome": "dor", "status": "presente"},
+                 {"nome": "local_dor", "status": "presente", "valor": "abdome"},
+                 {"nome": "trauma", "status": "negado"}],
+      "alergias_medicamentosas": {"status": "negado", "medicamentos": []}}),
+]
 
 
 class ErroExtracao(RuntimeError):
@@ -53,12 +80,20 @@ class OllamaExtrator(Extrator):
             cliente = ollama.Client(host=host or os.environ.get("OLLAMA_HOST") or None)
         self.cliente = cliente
 
+    @staticmethod
+    def _mensagens(relato: str) -> list[dict]:
+        msgs = [{"role": "system", "content": INSTRUCOES}]
+        for texto, resposta in EXEMPLOS:
+            msgs.append({"role": "user", "content": texto})
+            msgs.append({"role": "assistant", "content": json.dumps(resposta, ensure_ascii=False)})
+        msgs.append({"role": "user", "content": relato})
+        return msgs
+
     def extrair(self, relato: str) -> Extracao:
         try:
             resp = self.cliente.chat(
                 model=self.modelo,
-                messages=[{"role": "system", "content": INSTRUCOES},
-                          {"role": "user", "content": relato}],
+                messages=self._mensagens(relato),
                 format=_Resposta.model_json_schema(),
                 options={"temperature": 0},
             )
@@ -76,6 +111,9 @@ class OllamaExtrator(Extrator):
             for s in r.sinais
             if s.status != Status.NAO_MENCIONADO
         }
+        alergias = r.alergias_medicamentosas
+        if alergias and alergias.status == Status.NAO_MENCIONADO:
+            alergias = None if not alergias.medicamentos else AlergiasMedicamentosas(
+                status=Status.PRESENTE, medicamentos=alergias.medicamentos)
         return Extracao(queixa_principal=r.queixa_principal, duracao=r.duracao,
-                        sinais=list(sinais.values()),
-                        alergias_medicamentosas=r.alergias_medicamentosas)
+                        sinais=list(sinais.values()), alergias_medicamentosas=alergias)
