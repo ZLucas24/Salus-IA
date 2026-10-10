@@ -1,0 +1,106 @@
+{
+  "versao": "0.1.0",
+  "perguntas": [
+    {
+      "id": "P01",
+      "texto": "Em poucas palavras, o que trouxe você aqui hoje?",
+      "tipo": "relato_breve",
+      "max_caracteres": 200,
+      "preenche": [
+        {"tipo": "campo", "nome": "queixa_principal"},
+        {"tipo": "campo", "nome": "relato_original"},
+        {"tipo": "sinal", "nome": "qualquer sinal citado no relato"}
+      ]
+    },
+    {
+      "id": "P02",
+      "texto": "Há quanto tempo isso começou?",
+      "tipo": "numero_unidade",
+      "unidades": ["minutos", "horas", "dias", "semanas", "meses", "anos"],
+      "preenche": [{"tipo": "campo", "nome": "duracao"}]
+    },
+    {
+      "id": "P03",
+      "texto": "Começou de repente?",
+      "tipo": "sim_nao",
+      "preenche": [{"tipo": "sinal", "nome": "inicio_subito"}]
+    },
+    {
+      "id": "P04",
+      "texto": "Está com dor? De 0 a 10, quanto?",
+      "tipo": "sim_nao_escala",
+      "escala": {"min": 0, "max": 10},
+      "preenche": [{"tipo": "sinal", "nome": "dor", "valor": "intensidade 0-10"}]
+    },
+    {
+      "id": "P05",
+      "texto": "Onde é a dor?",
+      "tipo": "opcao",
+      "opcoes": ["cabeca", "peito", "abdome", "costas", "membros", "outro"],
+      "preenche": [{"tipo": "sinal", "nome": "local_dor", "valor": "opção escolhida"}]
+    },
+    {
+      "id": "P06",
+      "texto": "Está com falta de ar?",
+      "tipo": "sim_nao",
+      "preenche": [{"tipo": "sinal", "nome": "dispneia"}]
+    },
+    {
+      "id": "P07",
+      "texto": "Há sangramento? Está sangrando agora?",
+      "tipo": "sim_nao_duplo",
+      "partes": ["ha_sangramento", "sangrando_agora"],
+      "preenche": [{"tipo": "sinal", "nome": "sangramento", "valor": "ativo_agora quando sangrando agora"}]
+    },
+    {
+      "id": "P08",
+      "texto": "Desmaiou, ficou confuso ou teve convulsão?",
+      "tipo": "sim_nao_multiplo",
+      "partes": ["desmaiou_ou_confuso", "convulsao"],
+      "preenche": [
+        {"tipo": "sinal", "nome": "alteracao_consciencia"},
+        {"tipo": "sinal", "nome": "convulsao"}
+      ]
+    },
+    {
+      "id": "P09",
+      "texto": "Teve febre? Mediu quanto?",
+      "tipo": "sim_nao_numero",
+      "unidade": "°C",
+      "preenche": [{"tipo": "sinal", "nome": "febre", "valor": "temperatura em °C, se medida"}]
+    },
+    {
+      "id": "P10",
+      "texto": "Está vomitando sem parar?",
+      "tipo": "sim_nao",
+      "preenche": [{"tipo": "sinal", "nome": "vomito_persistente"}]
+    },
+    {
+      "id": "P11",
+      "texto": "Sofreu queda, pancada ou acidente?",
+      "tipo": "sim_nao",
+      "preenche": [{"tipo": "sinal", "nome": "trauma"}]
+    },
+    {
+      "id": "P12",
+      "texto": "Está grávida? Tem doença crônica (diabetes, coração, pressão, pulmão)?",
+      "tipo": "sim_nao_opcoes",
+      "partes": ["gravida", "doenca_cronica"],
+      "opcoes_doenca_cronica": ["diabetes", "coracao", "pressao", "pulmao"],
+      "preenche": [
+        {"tipo": "sinal", "nome": "gravidez"},
+        {"tipo": "sinal", "nome": "doenca_cronica", "valor": "doenças marcadas"}
+      ]
+    },
+    {
+      "id": "P13",
+      "texto": "Tem alergia a algum medicamento? Qual?",
+      "tipo": "sim_nao_texto",
+      "preenche": [{"tipo": "campo", "nome": "alergias_medicamentosas"}]
+    }
+  ],
+  "dados_atendente": {
+    "obrigatorios": ["idade"],
+    "opcionais": ["temperatura", "frequencia_cardiaca", "pressao_arterial", "saturacao"]
+  }
+}

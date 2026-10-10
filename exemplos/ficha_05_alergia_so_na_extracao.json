@@ -1,0 +1,12 @@
+{
+  "dados_atendente": {
+    "idade": 29
+  },
+  "respostas": {
+    "P01": "Coceira e manchas na pele, sou alérgico a dipirona",
+    "P02": {
+      "valor": 2,
+      "unidade": "dias"
+    }
+  }
+}
