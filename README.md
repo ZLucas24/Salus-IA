@@ -10,8 +10,7 @@ pontuação virá de regras explícitas em código (hoje é um *stub* que devolv
 número fixo, e o resultado sai marcado como provisório).
 
 > **Aviso: todos os dados são simulados.** Não há pacientes reais no repositório
-> e nenhum dado real deve ser colocado nele. Esta ferramenta não é um dispositivo
-> médico e não deve ser usada em atendimento real.
+> e nenhum dado real deve ser colocado nele. Esta ferramenta não é um dispositivo médico e não deve ser usada em atendimento real.
 
 ## Sobre o projeto
 
@@ -52,8 +51,7 @@ Um arquivo JSON com os dados do atendente e as respostas por id de pergunta. Só
 | P12 risco | `{"gravida": false, "doenca_cronica": ["diabetes"]}` (diabetes, coracao, pressao, pulmao) |
 | P13 alergia | `{"resposta": true, "texto": "dipirona, penicilina"}` |
 
-Dados do atendente: `idade` (obrigatória), `temperatura`, `frequencia_cardiaca`,
-`pressao_sistolica`, `pressao_diastolica` e `saturacao` (opcionais).
+Dados do atendente: `idade` (obrigatória), `temperatura`, `frequencia_cardiaca`, `pressao_sistolica`, `pressao_diastolica` e `saturacao` (opcionais).
 
 Há fichas de exemplo em [exemplos/](exemplos/), incluindo três que falham de
 propósito (P01 com 201 caracteres, sem idade e resposta com tipo errado).

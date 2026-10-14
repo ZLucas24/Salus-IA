@@ -1,21 +1,16 @@
 # Roteiro de entrevista
 
 Guia para o atendente conduzir a entrevista de triagem do Salus IA. As perguntas
-vêm de [triagem/dados/questionario.json](../triagem/dados/questionario.json). Se o
-questionário mudar, este roteiro deve mudar junto.
+vêm de [triagem/dados/questionario.json](../triagem/dados/questionario.json). Se o questionário mudar, este roteiro deve mudar junto.
 
 > Protótipo com **dados simulados**. Não use com pacientes reais.
 
 ## Princípios
 
 - Leia as perguntas **como estão escritas**, na ordem, com calma e em linguagem simples.
-- Registre o que o paciente **disse**, sem interpretar. Quem organiza os dados é o
-  sistema, e ele **não decide gravidade**.
-- Não insista nem sugira respostas. Se o paciente não souber ou não quiser
-  responder, **deixe a pergunta em branco**: ela ficará como pendente, e isso é
-  melhor que um chute.
-- Se o paciente piorar ou aparentar urgência durante a entrevista, siga o protocolo
-  do serviço e acione a equipe clínica. O roteiro não substitui esse julgamento.
+- Registre o que o paciente **disse**, sem interpretar. Quem organiza os dados é o sistema, e ele **não decide gravidade**.
+- Não insista nem sugira respostas. Se o paciente não souber ou não quiser responder, **deixe a pergunta em branco**: ela ficará como pendente, e isso é melhor que um chute.
+- Se o paciente piorar ou aparentar urgência durante a entrevista, siga o protocolo do serviço e acione a equipe clínica. O roteiro não substitui esse julgamento.
 
 ## Antes de começar: dados do atendente
 
@@ -41,8 +36,7 @@ traduza para termos técnicos. Se ficar longo, resuma sem mudar o sentido.
 **Pergunte:** "Há quanto tempo isso começou?"
 **Registre:** número e unidade (minutos, horas, dias, semanas, meses ou anos).
 Ex.: 2 horas.
-**Dica:** se disser "desde ontem", converta com o paciente ("umas 20 horas? 1 dia?")
-e registre o que ele confirmar.
+**Dica:** se disser "desde ontem", converta com o paciente ("umas 20 horas? 1 dia?") e registre o que ele confirmar.
 
 ### P03. Início súbito
 **Pergunte:** "Começou de repente?"
@@ -76,8 +70,7 @@ obrigatória quando a resposta é sim.
 ### P09. Febre
 **Pergunte:** "Teve febre? Mediu quanto?"
 **Registre:** sim ou não e, se mediu, a temperatura em °C.
-**Dica:** "febre" é o que o paciente relata. Se ele não mediu, registre só o sim e
-deixe o valor em branco.
+**Dica:** "febre" é o que o paciente relata. Se ele não mediu, registre só o sim e deixe o valor em branco.
 
 ### P10. Vômitos
 **Pergunte:** "Está vomitando sem parar?"
@@ -89,11 +82,8 @@ deixe o valor em branco.
 
 ### P12. Gravidez e doenças crônicas
 **Pergunte:** "Está grávida? Tem doença crônica (diabetes, coração, pressão, pulmão)?"
-**Registre:** (a) grávida: sim ou não; (b) as doenças que o paciente citar entre
-diabetes, coração, pressão e pulmão. Se nenhuma, lista vazia.
-**Cuidado:** faça a pergunta da gravidez com respeito e só quando fizer sentido
-para o paciente; se ela não se aplica ou o paciente prefere não responder, deixe
-em branco.
+**Registre:** (a) grávida: sim ou não; (b) as doenças que o paciente citar entre diabetes, coração, pressão e pulmão. Se nenhuma, lista vazia.
+**Cuidado:** faça a pergunta da gravidez com respeito e só quando fizer sentido para o paciente; se ela não se aplica ou o paciente prefere não responder, deixe em branco.
 
 ### P13. Alergia a medicamento
 **Pergunte:** "Tem alergia a algum medicamento? Qual?"
