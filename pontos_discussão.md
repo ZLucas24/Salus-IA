@@ -1,4 +1,4 @@
-### *Pontos de que devemos discuutir sobre a infra do projeto:*
+### *Pontos de que devemos discutir sobre a infra do projeto:*
 
 1. No Readme .md temos uma referêcia a uma mock de extratos porém ele já existe (extrator_ollama.py)
 
@@ -147,6 +147,13 @@
     2. Sugestão de próxima pergunta: depois da P01, o sistema olha os sinais extraídos e destaca as perguntas mais relevantes (“citou dor no peito: confirmar início súbito, falta de ar, local”). Pode ser uma tabela queixa → perguntas prioritárias, escrita em código e revisada por um clínico, e a IA só reconhece a queixa. O atendente continua no controle.
     3. Perguntas geradas pela IA: o modelo escreve perguntas novas na hora. É o mais “agente”, mas o mais arriscado: não é auditável, pode inventar, e o seu documento já exige que a IA nunca decida sozinha. Eu não recomendo para o MVP.
     *prescisamos desenvolver o 1 e 2 pelo menos para o Hackathon*
+
+19. Segurança e dados reais (LGPD) -> não importante para infra do hackton mas para o pitch
+    Hoje o projeto usa só dados simulados. Para dados reais, a extração do relato roda em modelo local (Ollama), em infraestrutura em território nacional.
+    Serviços externos (Supabase e Hugging Face) ficam desativados ou restritos a dados simulados.
+    Isso reduz o risco, mas não substitui: base legal, minimização dos campos, controle de acesso, criptografia, retenção e eliminação dos dados, proteção dos logs e plano de resposta a incidentes (arts. 46 e 48).
+    A receita vem da assinatura pelo serviço, nunca da venda ou do compartilhamento de dados de pacientes (art. 11, § 4º).
+    A confirmar: o que o Ollama registra em disco, qual região o Supabase usa e o prazo atual de comunicação de incidentes à ANPD.
 
 ### Sinais.py:
 1. Status: acrescentar NAO_SABE, RECUSOU e NAO_SE_APLICA. NAO_MENCIONADO passa a significar só “ninguém perguntou”. Regra para o motor: só NEGADO conta como “não”, e os estados desconhecidos nunca contam.

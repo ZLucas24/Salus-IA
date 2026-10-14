@@ -84,6 +84,41 @@ Os riscos mais fortes estão na base clínica da pontuação e no enquadramento 
 | **Acesso ao celular** | Parte do público pode ter smartphone limitado ou pouco letramento digital | Oferecer senha impressa ou painel na sala de espera |
 | **Falsa segurança no aviso de piora** | O paciente pode confiar no questionário em vez de chamar a equipe | Deixar claro na página que o aviso não substitui chamar a equipe |
 
+# Legislação e conformidade:
+Esta seção reúne as normas que mais afetam o projeto. Não substitui parecer jurídico. Itens marcados com "confirmar" dependem de checagem em fonte oficial ou com a coordenação do curso.
+
+**1. Entrevistas e ética em pesquisa (urgente)**
+• Perguntar ao CEP ou à coordenação do curso se as entrevistas com o enfermeiro e o médico precisam de submissão (Resolução CNS 466/2012). A resolução manda aguardar a decisão do CEP antes de iniciar (item XI.2.a).
+• Pedir a resposta por escrito e não começar as entrevistas antes dela. Se houver submissão, replanejar o cronograma (as entrevistas estão previstas até 18/10).
+• Preparar o Termo de Consentimento Livre e Esclarecido (TCLE) para os profissionais, em duas vias, com os itens do IV.3. Atenção ao vínculo do entrevistado com a UPA (IV.6.b): ele precisa poder recusar sem consequência no trabalho.
+• Não há TCLE de paciente nesta fase. Só haveria se houver piloto com pacientes ou conversas com eles.
+• Confirmar se a Resolução CNS 510/2016 (ciências humanas e sociais) se aplica às entrevistas.
+
+**2. Dados da UPA**
+• Pedir apenas dados agregados e anonimizados de tempo de espera (LGPD, art. 12). Confirmar com a UPA como a anonimização é feita.
+• Obter autorização formal da UPA e um termo de ciência e responsabilidade assinado pelo orientador ou coordenador.
+• Conduzir essa etapa como atividade da universidade, separada da parte comercial do projeto. A orientação da ANPD sobre pesquisa (texto para discussão de 2022, preliminar) indica que a flexibilização acadêmica não cobre atividade comercial (confirmar se há orientação mais recente).
+
+**3. LGPD e segurança**
+• Hoje o projeto usa só dados simulados. Com dados reais, a extração do relato roda em modelo local (Ollama), em infraestrutura em território nacional. Supabase e Hugging Face ficam desativados ou restritos a dados simulados.
+• Isso reduz o risco, mas não substitui: base legal, minimização dos campos da ficha, controle de acesso por perfil, criptografia, retenção e eliminação dos dados, proteção dos logs e plano de resposta a incidentes (arts. 46 e 48).
+• Em uso real, a unidade de saúde seria a controladora e a startup a operadora, formalizado em contrato (arts. 5º e 39). A base natural seria a tutela da saúde (arts. 7º, VIII e 11, II, f).
+• A decisão final do profissional é princípio de produto. A LGPD não garante revisão humana expressa de decisões automatizadas (art. 20), então isso não deve ser apresentado como obrigação legal.
+• Confirmar: o que o Ollama registra em disco, qual região o Supabase usa e o prazo atual de comunicação de incidentes à ANPD.
+
+**4. Modelo de negócio**
+• A receita vem da assinatura pelo serviço, nunca da venda ou do compartilhamento de dados de pacientes (art. 11, § 4º da LGPD veda o uso compartilhado de dados de saúde com objetivo de vantagem econômica, com exceções).
+• Qualquer uso secundário dos dados, como treino de modelos ou indicadores para terceiros, só após validação jurídica e com anonimização real.
+
+**5. Regulação do produto**
+• Anvisa: software que sugere prioridade clínica provavelmente é software como dispositivo médico (RDC 657/2022 e 751/2022; a 657 está em revisão). Levantar o caminho regulatório antes de oferecer o produto a uma unidade.
+• Resolução CFM 2.454/2026: a responsabilidade final é sempre do médico. Alinhar a linguagem do pitch.
+• Resolução Cofen 423/2012, sobre classificação de risco pelo enfermeiro (confirmar o texto).
+• PL 2.338/2023 (marco legal da IA) ainda tramita na Câmara. Acompanhar.
+
+**6. Protocolo de Manchester**
+• Não copiar fluxogramas nem discriminadores. Usar regras próprias, validadas pelo revisor clínico, com a origem de cada peso documentada.
+
 # O plano detalhado de tarefas por pessoa está no documento "SalUS.ai — Plano de atividades até o hackathon (07/11)". Em resumo:
 1. Semana de 05/10 (em andamento): inscrição enviada, repositório, primeiro agente rodando e entrevistas pedidas.
 2. Até 18/10: duas entrevistas feitas, agente com 1 queixa e segundo relatório quinzenal do programa.
