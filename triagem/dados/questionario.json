@@ -1,106 +1,337 @@
 {
-  "versao": "0.1.0",
+  "versao": "0.2.0",
+  "origem": "agente_triagem.md, seção 4 (banco de perguntas da equipe)",
+  "revisao_clinica": false,
+  "obrigatoriedade": {
+    "S": "segurança: nunca pular por suposição",
+    "N": "núcleo",
+    "M": "módulo (só quando o módulo está ativo)",
+    "C": "complementar: não entra na pontuação nem nas pendências"
+  },
+  "modulos": {
+    "dor_toracica": "Dor no peito",
+    "dor_abdominal": "Dor abdominal",
+    "respiratorio_febre": "Febre e respiratório"
+  },
   "perguntas": [
     {
-      "id": "P01",
-      "texto": "Em poucas palavras, o que trouxe você aqui hoje?",
-      "tipo": "relato_breve",
-      "max_caracteres": 200,
-      "preenche": [
-        {"tipo": "campo", "nome": "queixa_principal"},
-        {"tipo": "campo", "nome": "relato_original"},
-        {"tipo": "sinal", "nome": "qualquer sinal citado no relato"}
+      "id": "Q01", "obrigatoriedade": "N",
+      "texto": "O que você está sentindo e o que fez você procurar ajuda hoje?",
+      "finalidade": "Queixa principal (relato livre)",
+      "partes": [{"nome": "resposta", "forma": "texto", "max_caracteres": 200}],
+      "campos": [{"campo": "relato", "de": "resposta"}]
+    },
+    {
+      "id": "Q02", "obrigatoriedade": "N",
+      "texto": "Quando começou? Foi de repente ou aos poucos?",
+      "finalidade": "Agudo ou crônico",
+      "partes": [
+        {"nome": "inicio", "forma": "opcao", "opcoes": ["de_repente", "aos_poucos"]},
+        {"nome": "duracao", "forma": "numero_unidade",
+         "unidades": ["minutos", "horas", "dias", "semanas", "meses", "anos"]}
+      ],
+      "sinais": [{"nome": "inicio_subito", "de": "inicio", "quando": "de_repente"}],
+      "campos": [{"campo": "duracao", "de": "duracao"}]
+    },
+    {
+      "id": "Q03", "obrigatoriedade": "N",
+      "texto": "Desde que começou, está igual, melhorando ou piorando?",
+      "finalidade": "Evolução",
+      "partes": [{"nome": "resposta", "forma": "opcao", "opcoes": ["igual", "melhorando", "piorando"]}],
+      "sinais": [{"nome": "piora_progressiva", "de": "resposta", "quando": "piorando"}]
+    },
+    {
+      "id": "Q04", "obrigatoriedade": "N",
+      "texto": "Como é o sintoma? (queimação, aperto, pontada, cólica)",
+      "finalidade": "Caráter do sintoma",
+      "partes": [{"nome": "resposta", "forma": "opcao",
+                  "opcoes": ["queimacao", "aperto", "pontada", "colica", "outro"]}],
+      "sinais": [{"nome": "dor_em_aperto", "de": "resposta", "quando": "aperto"}]
+    },
+    {
+      "id": "Q05", "obrigatoriedade": "N",
+      "texto": "De 0 a 10, quanto incomoda?",
+      "finalidade": "Dor autorreferida (sinal fraco; nota baixa nunca reduz prioridade)",
+      "partes": [{"nome": "resposta", "forma": "escala", "minimo": 0, "maximo": 10}],
+      "sinais": [{"nome": "dor", "de": "resposta", "valor_de": "resposta"}]
+    },
+    {
+      "id": "Q06", "obrigatoriedade": "N",
+      "texto": "O sintoma vai ou se espalha para outra parte do corpo?",
+      "finalidade": "Irradiação",
+      "partes": [
+        {"nome": "resposta", "forma": "sim_nao"},
+        {"nome": "para_onde", "forma": "texto", "max_caracteres": 80,
+         "depende_de": {"parte": "resposta", "igual": true}}
+      ],
+      "sinais": [{"nome": "irradiacao", "de": "resposta", "itens_de": "para_onde"}]
+    },
+    {
+      "id": "Q07", "obrigatoriedade": "N",
+      "texto": "O que faz melhorar ou piorar?",
+      "finalidade": "Fatores de piora e alívio",
+      "partes": [{"nome": "resposta", "forma": "texto", "max_caracteres": 200}]
+    },
+    {
+      "id": "Q08", "obrigatoriedade": "S",
+      "texto": "Você desmaiou, ficou confuso ou sentiu que ia apagar?",
+      "finalidade": "Sinal de alerta",
+      "partes": [{"nome": "resposta", "forma": "sim_nao"}],
+      "sinais": [{"nome": "alteracao_consciencia", "de": "resposta"}]
+    },
+    {
+      "id": "Q09", "obrigatoriedade": "S",
+      "texto": "Está com falta de ar ou dificuldade para respirar?",
+      "finalidade": "Sinal de alerta",
+      "partes": [{"nome": "resposta", "forma": "sim_nao"}],
+      "sinais": [{"nome": "dispneia", "de": "resposta"}]
+    },
+    {
+      "id": "Q10", "obrigatoriedade": "S",
+      "texto": "Tem alergia a algum remédio, alimento ou contraste de exame?",
+      "finalidade": "Segurança (não entra na pontuação)",
+      "partes": [
+        {"nome": "resposta", "forma": "sim_nao"},
+        {"nome": "tipos", "forma": "multiplas", "opcional": true,
+         "opcoes": ["medicamento", "alimento", "contraste"],
+         "depende_de": {"parte": "resposta", "igual": true}},
+        {"nome": "texto", "forma": "texto", "max_caracteres": 120,
+         "depende_de": {"parte": "resposta", "igual": true}}
+      ],
+      "campos": [{"campo": "alergias", "de": "resposta", "tipos_de": "tipos", "itens_de": "texto"}]
+    },
+    {
+      "id": "Q11", "obrigatoriedade": "S",
+      "texto": "Usa algum remédio, chá ou suplemento todos os dias? Algum para afinar o sangue ou insulina?",
+      "finalidade": "Segurança e risco de sangramento",
+      "partes": [
+        {"nome": "resposta", "forma": "sim_nao"},
+        {"nome": "anticoagulante", "forma": "sim_nao",
+         "depende_de": {"parte": "resposta", "igual": true}},
+        {"nome": "insulina", "forma": "sim_nao",
+         "depende_de": {"parte": "resposta", "igual": true}},
+        {"nome": "texto", "forma": "texto", "max_caracteres": 120,
+         "depende_de": {"parte": "resposta", "igual": true}}
+      ],
+      "sinais": [
+        {"nome": "uso_anticoagulante", "de": "anticoagulante"},
+        {"nome": "uso_insulina", "de": "insulina"}
       ]
     },
     {
-      "id": "P02",
-      "texto": "Há quanto tempo isso começou?",
-      "tipo": "numero_unidade",
-      "unidades": ["minutos", "horas", "dias", "semanas", "meses", "anos"],
-      "preenche": [{"tipo": "campo", "nome": "duracao"}]
+      "id": "Q12", "obrigatoriedade": "S",
+      "texto": "Tomou algum remédio hoje, inclusive para febre ou dor? Que horas?",
+      "finalidade": "Pode mascarar febre e dor",
+      "partes": [
+        {"nome": "resposta", "forma": "sim_nao"},
+        {"nome": "classes", "forma": "multiplas",
+         "opcoes": ["antitermico", "analgesico", "outro"],
+         "depende_de": {"parte": "resposta", "igual": true}},
+        {"nome": "texto", "forma": "texto", "max_caracteres": 120,
+         "depende_de": {"parte": "resposta", "igual": true}},
+        {"nome": "ha", "forma": "numero_unidade", "unidades": ["minutos", "horas", "dias"],
+         "depende_de": {"parte": "resposta", "igual": true}}
+      ],
+      "sinais": [{"nome": "antitermico_recente", "de": "classes", "quando": "antitermico"}]
     },
     {
-      "id": "P03",
-      "texto": "Começou de repente?",
-      "tipo": "sim_nao",
-      "preenche": [{"tipo": "sinal", "nome": "inicio_subito"}]
+      "id": "Q13", "obrigatoriedade": "S",
+      "texto": "Tem alguma doença diagnosticada, como diabetes, pressão alta, problema no coração, pulmão ou rim?",
+      "finalidade": "Comorbidades (lista vazia significa nenhuma)",
+      "partes": [{"nome": "resposta", "forma": "multiplas",
+                  "opcoes": ["diabetes", "hipertensao", "cardiopatia", "pneumopatia", "renopatia", "outra"]}],
+      "sinais": [{"nome": "doenca_cronica", "de": "resposta", "itens_de": "resposta"}]
     },
     {
-      "id": "P04",
-      "texto": "Está com dor? De 0 a 10, quanto?",
-      "tipo": "sim_nao_escala",
-      "escala": {"min": 0, "max": 10},
-      "preenche": [{"tipo": "sinal", "nome": "dor", "valor": "intensidade 0-10"}]
+      "id": "Q14", "obrigatoriedade": "N",
+      "texto": "Já fez cirurgia, ficou internado ou recebeu transfusão de sangue?",
+      "finalidade": "Histórico clínico (lista vazia significa nenhum)",
+      "partes": [{"nome": "resposta", "forma": "multiplas",
+                  "opcoes": ["cirurgia", "internacao", "transfusao"]}],
+      "sinais": [{"nome": "cirurgia_internacao_previa", "de": "resposta", "itens_de": "resposta"}]
     },
     {
-      "id": "P05",
-      "texto": "Onde é a dor?",
-      "tipo": "opcao",
-      "opcoes": ["cabeca", "peito", "abdome", "costas", "membros", "outro"],
-      "preenche": [{"tipo": "sinal", "nome": "local_dor", "valor": "opção escolhida"}]
+      "id": "Q15", "obrigatoriedade": "S",
+      "texto": "(Mulheres em idade fértil) Existe chance de estar grávida ou está amamentando? A menstruação está atrasada?",
+      "finalidade": "Gravidez",
+      "partes": [
+        {"nome": "gravida_possivel", "forma": "sim_nao"},
+        {"nome": "amamentando", "forma": "sim_nao"},
+        {"nome": "menstruacao_atrasada", "forma": "sim_nao"}
+      ],
+      "aplica_se": {
+        "sexo_em": ["feminino", "intersexo", "ausente"],
+        "idade_entre": [10, 55],
+        "nota": "Faixa de idade provisória, a validar pelo revisor clínico. Sexo ausente mantém a pergunta."
+      },
+      "sinais": [
+        {"nome": "gravidez_possivel", "de": ["gravida_possivel", "menstruacao_atrasada"]},
+        {"nome": "amamentando", "de": "amamentando"}
+      ]
+    },
+
+    {
+      "id": "T01", "obrigatoriedade": "M", "modulo": "dor_toracica",
+      "texto": "Está com suor frio, enjoo ou tontura junto com a dor?",
+      "finalidade": "Sintomas associados à dor no peito",
+      "partes": [{"nome": "resposta", "forma": "sim_nao"}],
+      "sinais": [{"nome": "suor_frio_enjoo_tontura", "de": "resposta"}]
     },
     {
-      "id": "P06",
-      "texto": "Está com falta de ar?",
-      "tipo": "sim_nao",
-      "preenche": [{"tipo": "sinal", "nome": "dispneia"}]
+      "id": "T02", "obrigatoriedade": "M", "modulo": "dor_toracica",
+      "texto": "A dor piora ao esforço ou ao respirar fundo?",
+      "finalidade": "Relação com esforço e respiração",
+      "partes": [{"nome": "resposta", "forma": "sim_nao"}],
+      "sinais": [{"nome": "dor_piora_esforco_respirar", "de": "resposta"}]
     },
     {
-      "id": "P07",
-      "texto": "Há sangramento? Está sangrando agora?",
-      "tipo": "sim_nao_duplo",
-      "partes": ["ha_sangramento", "sangrando_agora"],
-      "preenche": [{"tipo": "sinal", "nome": "sangramento", "valor": "ativo_agora quando sangrando agora"}]
+      "id": "T03", "obrigatoriedade": "M", "modulo": "dor_toracica",
+      "texto": "Fez viagem longa ou cirurgia recente? Tem perna inchada ou dolorida?",
+      "finalidade": "Risco tromboembólico",
+      "partes": [{"nome": "resposta", "forma": "sim_nao"}],
+      "sinais": [{"nome": "risco_tromboembolico", "de": "resposta"}]
     },
+
     {
-      "id": "P08",
-      "texto": "Desmaiou, ficou confuso ou teve convulsão?",
-      "tipo": "sim_nao_multiplo",
-      "partes": ["desmaiou_ou_confuso", "convulsao"],
-      "preenche": [
-        {"tipo": "sinal", "nome": "alteracao_consciencia"},
-        {"tipo": "sinal", "nome": "convulsao"}
+      "id": "A01", "obrigatoriedade": "M", "modulo": "dor_abdominal",
+      "texto": "Onde exatamente dói, e a dor mudou de lugar?",
+      "finalidade": "Localização e migração da dor",
+      "partes": [
+        {"nome": "local", "forma": "opcao",
+         "opcoes": ["parte_superior", "parte_inferior_direita", "parte_inferior_esquerda",
+                    "ao_redor_do_umbigo", "toda_a_barriga", "outro"]},
+        {"nome": "mudou_de_lugar", "forma": "sim_nao"}
+      ],
+      "sinais": [
+        {"nome": "dor_abdominal", "de": "local", "itens_de": "local"},
+        {"nome": "dor_migratoria", "de": "mudou_de_lugar"}
       ]
     },
     {
-      "id": "P09",
-      "texto": "Teve febre? Mediu quanto?",
-      "tipo": "sim_nao_numero",
-      "unidade": "°C",
-      "preenche": [{"tipo": "sinal", "nome": "febre", "valor": "temperatura em °C, se medida"}]
-    },
-    {
-      "id": "P10",
-      "texto": "Está vomitando sem parar?",
-      "tipo": "sim_nao",
-      "preenche": [{"tipo": "sinal", "nome": "vomito_persistente"}]
-    },
-    {
-      "id": "P11",
-      "texto": "Sofreu queda, pancada ou acidente?",
-      "tipo": "sim_nao",
-      "preenche": [{"tipo": "sinal", "nome": "trauma"}]
-    },
-    {
-      "id": "P12",
-      "texto": "Está grávida? Tem doença crônica (diabetes, coração, pressão, pulmão)?",
-      "tipo": "sim_nao_opcoes",
-      "partes": ["gravida", "doenca_cronica"],
-      "opcoes_doenca_cronica": ["diabetes", "coracao", "pressao", "pulmao"],
-      "preenche": [
-        {"tipo": "sinal", "nome": "gravidez"},
-        {"tipo": "sinal", "nome": "doenca_cronica", "valor": "doenças marcadas"}
+      "id": "A02", "obrigatoriedade": "M", "modulo": "dor_abdominal",
+      "texto": "Está vomitando? Tem sangue no vômito ou nas fezes?",
+      "finalidade": "Vômito e sangramento digestivo",
+      "partes": [
+        {"nome": "vomitando", "forma": "sim_nao"},
+        {"nome": "episodios", "forma": "numero", "minimo": 1, "maximo": 100,
+         "depende_de": {"parte": "vomitando", "igual": true}},
+        {"nome": "sangue_vomito_ou_fezes", "forma": "sim_nao"}
+      ],
+      "sinais": [
+        {"nome": "vomito", "de": "vomitando", "valor_de": "episodios"},
+        {"nome": "sangue_vomito_fezes", "de": "sangue_vomito_ou_fezes"}
       ]
     },
     {
-      "id": "P13",
-      "texto": "Tem alergia a algum medicamento? Qual?",
-      "tipo": "sim_nao_texto",
-      "preenche": [{"tipo": "campo", "nome": "alergias_medicamentosas"}]
+      "id": "A03", "obrigatoriedade": "M", "modulo": "dor_abdominal",
+      "texto": "Está soltando gases e evacuando? Tem diarreia?",
+      "finalidade": "Trânsito intestinal",
+      "partes": [
+        {"nome": "gases_e_evacuando", "forma": "sim_nao"},
+        {"nome": "diarreia", "forma": "sim_nao"}
+      ],
+      "sinais": [
+        {"nome": "sem_gases_evacuacao", "de": "gases_e_evacuando", "inverter": true},
+        {"nome": "diarreia", "de": "diarreia"}
+      ]
+    },
+    {
+      "id": "A04", "obrigatoriedade": "M", "modulo": "dor_abdominal",
+      "texto": "A barriga está dura ou inchada?",
+      "finalidade": "Abdome rígido ou distendido",
+      "partes": [{"nome": "resposta", "forma": "sim_nao"}],
+      "sinais": [{"nome": "abdome_rigido_distendido", "de": "resposta"}]
+    },
+    {
+      "id": "A05", "obrigatoriedade": "M", "modulo": "dor_abdominal",
+      "texto": "Está urinando normalmente?",
+      "finalidade": "Alteração urinária (sim = urina normal)",
+      "partes": [{"nome": "resposta", "forma": "sim_nao"}],
+      "sinais": [{"nome": "alteracao_urinaria", "de": "resposta", "inverter": true}]
+    },
+
+    {
+      "id": "R01", "obrigatoriedade": "M", "modulo": "respiratorio_febre",
+      "texto": "Você sentiu febre ou calafrios?",
+      "finalidade": "Febre referida (maior temperatura medida, se houver)",
+      "partes": [
+        {"nome": "febre", "forma": "sim_nao"},
+        {"nome": "maior_temperatura", "forma": "numero", "minimo": 30, "maximo": 45,
+         "depende_de": {"parte": "febre", "igual": true}},
+        {"nome": "calafrios", "forma": "sim_nao"}
+      ],
+      "sinais": [
+        {"nome": "febre_referida", "de": "febre", "valor_de": "maior_temperatura"},
+        {"nome": "calafrios", "de": "calafrios"}
+      ]
+    },
+    {
+      "id": "R02", "obrigatoriedade": "M", "modulo": "respiratorio_febre",
+      "texto": "Consegue falar frases inteiras sem parar para respirar?",
+      "finalidade": "Fala entrecortada (sim = fala frases inteiras)",
+      "partes": [{"nome": "resposta", "forma": "sim_nao"}],
+      "sinais": [{"nome": "fala_entrecortada", "de": "resposta", "inverter": true}]
+    },
+    {
+      "id": "R03", "obrigatoriedade": "M", "modulo": "respiratorio_febre",
+      "texto": "Tem chiado no peito ou tosse com sangue?",
+      "finalidade": "Chiado e tosse com sangue",
+      "partes": [
+        {"nome": "chiado", "forma": "sim_nao"},
+        {"nome": "tosse_com_sangue", "forma": "sim_nao"}
+      ],
+      "sinais": [
+        {"nome": "chiado", "de": "chiado"},
+        {"nome": "tosse_com_sangue", "de": "tosse_com_sangue"}
+      ]
+    },
+    {
+      "id": "R04", "obrigatoriedade": "M", "modulo": "respiratorio_febre",
+      "texto": "Esteve em contato com alguém doente ou viajou recentemente?",
+      "finalidade": "Exposição",
+      "partes": [{"nome": "resposta", "forma": "sim_nao"}],
+      "sinais": [{"nome": "contato_ou_viagem", "de": "resposta"}]
+    },
+    {
+      "id": "R05", "obrigatoriedade": "M", "modulo": "respiratorio_febre",
+      "texto": "Está conseguindo beber líquidos?",
+      "finalidade": "Hidratação (sim = consegue beber)",
+      "partes": [{"nome": "resposta", "forma": "sim_nao"}],
+      "sinais": [{"nome": "dificuldade_beber", "de": "resposta", "inverter": true}]
+    },
+
+    {
+      "id": "C01", "obrigatoriedade": "C",
+      "texto": "Há na família (pais, irmãos) histórico de infarto precoce, derrame, diabetes ou câncer?",
+      "finalidade": "Histórico familiar (para o médico)",
+      "partes": [{"nome": "resposta", "forma": "texto", "max_caracteres": 200}]
+    },
+    {
+      "id": "C02", "obrigatoriedade": "C",
+      "texto": "Você fuma, bebe ou usa alguma outra substância? Com que frequência?",
+      "finalidade": "Hábitos (para o médico)",
+      "partes": [{"nome": "resposta", "forma": "texto", "max_caracteres": 200}]
+    },
+    {
+      "id": "C03", "obrigatoriedade": "C",
+      "texto": "Como é o seu sono e como está o seu nível de estresse?",
+      "finalidade": "Sono e estresse (para o médico)",
+      "partes": [{"nome": "resposta", "forma": "texto", "max_caracteres": 200}]
+    },
+    {
+      "id": "C04", "obrigatoriedade": "C",
+      "texto": "Houve mudança recente no peso, no apetite ou no funcionamento do intestino e da urina?",
+      "finalidade": "Mudanças recentes (para o médico)",
+      "partes": [{"nome": "resposta", "forma": "texto", "max_caracteres": 200}]
     }
   ],
-  "dados_atendente": {
-    "obrigatorios": ["idade"],
-    "opcionais": ["temperatura", "frequencia_cardiaca", "pressao_arterial", "saturacao"]
-  }
+  "afericoes": [
+    {"id": "E01", "campo": "temperatura", "nome": "Temperatura", "unidade": "°C"},
+    {"id": "E02", "campo": "saturacao", "nome": "Saturação de oxigênio", "unidade": "%"},
+    {"id": "E03", "campo": "pressao", "nome": "Pressão arterial (sistólica e diastólica)", "unidade": "mmHg"},
+    {"id": "E04", "campo": "frequencia_cardiaca", "nome": "Frequência cardíaca", "unidade": "bpm"},
+    {"id": "E05", "campo": "frequencia_respiratoria", "nome": "Frequência respiratória", "unidade": "irpm"},
+    {"id": "E06", "campo": "glicemia", "nome": "Glicemia capilar (diabetes, confusão ou suspeita de hipoglicemia)", "unidade": "mg/dL"},
+    {"id": "E07", "campo": "glasgow", "nome": "Escala de consciência (Glasgow)", "unidade": "3 a 15"}
+  ]
 }

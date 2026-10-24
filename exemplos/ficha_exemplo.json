@@ -1,25 +1,31 @@
 {
   "dados_atendente": {
     "idade": 58,
+    "sexo_biologico": "masculino",
     "temperatura": 36.8,
-    "frequencia_cardiaca": 102,
+    "saturacao": 93,
     "pressao_sistolica": 150,
     "pressao_diastolica": 95,
-    "saturacao": 93
+    "frequencia_cardiaca": 102,
+    "frequencia_respiratoria": 22
   },
   "respostas": {
-    "P01": "Dor forte no peito há 2 horas e falta de ar",
-    "P02": {"valor": 2, "unidade": "horas"},
-    "P03": true,
-    "P04": {"resposta": true, "escala": 8},
-    "P05": "peito",
-    "P06": true,
-    "P07": {"ha_sangramento": false},
-    "P08": {"desmaiou_ou_confuso": false, "convulsao": false},
-    "P09": {"resposta": false},
-    "P10": false,
-    "P11": false,
-    "P12": {"gravida": false, "doenca_cronica": ["pressao"]},
-    "P13": {"resposta": false}
+    "Q01": "Dor forte no peito há 2 horas e falta de ar",
+    "Q02": {"inicio": "de_repente", "duracao": {"valor": 2, "unidade": "horas"}},
+    "Q03": "piorando",
+    "Q04": "aperto",
+    "Q05": 8,
+    "Q06": {"resposta": true, "para_onde": "braço esquerdo"},
+    "Q07": "piora quando caminha",
+    "Q08": false,
+    "Q09": true,
+    "Q10": {"resposta": false},
+    "Q11": {"resposta": true, "anticoagulante": false, "insulina": false, "texto": "losartana"},
+    "Q12": {"resposta": false},
+    "Q13": ["hipertensao"],
+    "Q14": [],
+    "T01": true,
+    "T02": true,
+    "T03": false
   }
 }

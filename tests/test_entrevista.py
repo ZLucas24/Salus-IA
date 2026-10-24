@@ -1,318 +1,301 @@
-"""Testes sem rede: usam um ExtratorFalso no lugar de qualquer modelo."""
-
-import json
-import subprocess
-import sys
-from pathlib import Path
+"""Orquestração da entrevista: validação, mesclagem, pendências e alertas."""
 
 import pytest
 from pydantic import ValidationError
 
+from helpers import ExtratorFalso, alerta, ficha, processar, sinal, citado
 from triagem.entrevista import FichaInvalida, processar_ficha
-from triagem.extracao import Extracao, Extrator, criar_extrator
-from triagem.extrator_mock import MockExtrator
-from triagem.pontuacao import pontuar
-from triagem.schema import AlergiasMedicamentosas, Duracao, SaidaTriagem, Sinal
-from triagem.sinais import NomeSinal, Origem, Status
-
-RAIZ = Path(__file__).parent.parent
-EXEMPLOS = RAIZ / "exemplos"
+from triagem.extracao import Extracao
+from triagem.schema import Alergias, DadosAtendente, Duracao, SaidaTriagem, Sinal
+from triagem.sinais import NomeSinal, Origem, Queixa, Status
 
 
-class ExtratorFalso(Extrator):
-    nome = "falso"
-
-    def __init__(self, extracao: Extracao | None = None):
-        self.extracao = extracao or Extracao()
-        self.chamadas: list[str] = []
-
-    def extrair(self, relato: str) -> Extracao:
-        self.chamadas.append(relato)
-        return self.extracao
-
-
-def citado(nome, status=Status.PRESENTE):
-    return Sinal(nome=nome, status=status, origem=Origem.EXTRAIDO_DO_RELATO)
-
-
-def ficha(respostas=None, idade=30):
-    return {"dados_atendente": {"idade": idade}, "respostas": respostas or {}}
-
-
-def sinal(saida, nome):
-    return next(s for s in saida.sinais if s.nome == nome)
-
-
-def processar(f, extracao=None):
-    return processar_ficha(f, ExtratorFalso(extracao))
-
-
-# --- schema ----------------------------------------------------------------
-
-def test_schema_rejeita_relato_com_mais_de_200_caracteres():
-    with pytest.raises(ValidationError):
-        SaidaTriagem(relato_original="x" * 201, dados_atendente={"idade": 1}, extrator="falso")
-
-
-def test_schema_rejeita_sinal_fora_do_vocabulario():
-    with pytest.raises(ValidationError):
-        Sinal(nome="alergia", status=Status.PRESENTE, origem=Origem.RESPOSTA_DIRETA)
-
-
-def test_schema_rejeita_sinais_duplicados():
-    s = citado(NomeSinal.DOR)
-    with pytest.raises(ValidationError):
-        SaidaTriagem(relato_original="", sinais=[s, s],
-                     dados_atendente={"idade": 1}, extrator="falso")
-
-
-def test_saida_cobre_todos_os_sinais_e_nenhum_e_alergia():
-    saida = processar(ficha())
-    assert [s.nome for s in saida.sinais] == list(NomeSinal)
-    assert "alergia" not in {n.value for n in NomeSinal}
-
-
-# --- mapeamento das respostas fechadas ------------------------------------
-
-def test_respostas_fechadas_viram_sinais_com_origem_direta():
-    saida = processar(ficha({
-        "P03": True, "P04": {"resposta": True, "escala": 7}, "P05": "peito",
-        "P06": False, "P07": {"ha_sangramento": True, "sangrando_agora": True},
-        "P08": {"desmaiou_ou_confuso": True, "convulsao": False},
-        "P09": {"resposta": True, "valor": 38.5}, "P10": True, "P11": False,
-        "P12": {"gravida": True, "doenca_cronica": ["diabetes", "pulmao"]},
-    }))
-    esperado = {
-        NomeSinal.INICIO_SUBITO: (Status.PRESENTE, None),
-        NomeSinal.DOR: (Status.PRESENTE, 7),
-        NomeSinal.LOCAL_DOR: (Status.PRESENTE, "peito"),
-        NomeSinal.DISPNEIA: (Status.NEGADO, None),
-        NomeSinal.SANGRAMENTO: (Status.PRESENTE, "ativo_agora"),
-        NomeSinal.ALTERACAO_CONSCIENCIA: (Status.PRESENTE, None),
-        NomeSinal.CONVULSAO: (Status.NEGADO, None),
-        NomeSinal.FEBRE: (Status.PRESENTE, 38.5),
-        NomeSinal.VOMITO_PERSISTENTE: (Status.PRESENTE, None),
-        NomeSinal.TRAUMA: (Status.NEGADO, None),
-        NomeSinal.GRAVIDEZ: (Status.PRESENTE, None),
-        NomeSinal.DOENCA_CRONICA: (Status.PRESENTE, "diabetes, pulmao"),
-    }
-    for nome, (status, valor) in esperado.items():
-        s = sinal(saida, nome)
-        assert (s.status, s.valor) == (status, valor), nome
-        assert s.origem == Origem.RESPOSTA_DIRETA, nome
-
-
-def test_duracao_vem_da_p02():
-    saida = processar(ficha({"P02": {"valor": 2, "unidade": "horas"}}))
-    assert saida.duracao == Duracao(valor=2, unidade="horas")
-
-
-@pytest.mark.parametrize("resposta, status, meds", [
-    ({"resposta": False}, Status.NEGADO, []),
-    ({"resposta": True, "texto": "dipirona; penicilina"}, Status.PRESENTE,
-     ["dipirona", "penicilina"]),
-])
-def test_p13_preenche_alergias_fora_dos_sinais(resposta, status, meds):
-    saida = processar(ficha({"P13": resposta}))
-    assert saida.alergias_medicamentosas.status == status
-    assert saida.alergias_medicamentosas.medicamentos == meds
-    assert "P13" not in saida.perguntas_pendentes
-
-
-# --- perguntas pendentes ---------------------------------------------------
-
-def test_sem_respostas_tudo_nao_mencionado_e_pendente():
-    saida = processar(ficha())
-    assert all(s.status == Status.NAO_MENCIONADO for s in saida.sinais)
-    assert saida.perguntas_pendentes == [f"P{i:02d}" for i in range(1, 14)]
-    assert saida.alergias_medicamentosas.status == Status.NAO_MENCIONADO
-
-
-def test_pergunta_respondida_sai_das_pendentes():
-    saida = processar(ficha({"P06": False, "P13": {"resposta": False}}))
-    assert "P06" not in saida.perguntas_pendentes
-    assert "P13" not in saida.perguntas_pendentes
-    assert "P09" in saida.perguntas_pendentes
-
-
-def test_pergunta_nao_respondida_segue_pendente_mesmo_com_sinal_no_relato():
-    ext = Extracao(sinais=[citado(NomeSinal.DISPNEIA)])
-    saida = processar(ficha({"P01": "falta de ar"}), ext)
-    assert sinal(saida, NomeSinal.DISPNEIA).origem == Origem.EXTRAIDO_DO_RELATO
-    assert "P06" in saida.perguntas_pendentes
-
-
-# --- extrator e divergência ---------------------------------------------------
-
-def test_sinais_do_relato_entram_com_origem_extraido():
-    ext = Extracao(queixa_principal="dor no peito",
-                   sinais=[citado(NomeSinal.DOR), citado(NomeSinal.FEBRE, Status.NEGADO)])
-    saida = processar(ficha({"P01": "dor no peito sem febre"}), ext)
-    assert saida.queixa_principal == "dor no peito"
-    assert (sinal(saida, NomeSinal.DOR).status, sinal(saida, NomeSinal.DOR).origem) == (
-        Status.PRESENTE, Origem.EXTRAIDO_DO_RELATO)
-    assert sinal(saida, NomeSinal.FEBRE).status == Status.NEGADO
-    assert sinal(saida, NomeSinal.TRAUMA).status == Status.NAO_MENCIONADO
-    assert saida.extrator == "falso"
-
-
-def test_resposta_direta_prevalece_na_divergencia():
-    ext = Extracao(sinais=[citado(NomeSinal.DISPNEIA, Status.PRESENTE)])
-    saida = processar(ficha({"P01": "falta de ar", "P06": False}), ext)
-    s = sinal(saida, NomeSinal.DISPNEIA)
-    assert (s.status, s.origem) == (Status.NEGADO, Origem.RESPOSTA_DIRETA)
-
-
-def test_duracao_e_alergia_diretas_prevalecem_sobre_o_relato():
-    ext = Extracao(duracao=Duracao(valor=9, unidade="dias"),
-                   alergias_medicamentosas=AlergiasMedicamentosas(
-                       status=Status.PRESENTE, medicamentos=["dipirona"]))
-    saida = processar(ficha({"P01": "x", "P02": {"valor": 2, "unidade": "horas"},
-                             "P13": {"resposta": False}}), ext)
-    assert saida.duracao.unidade.value == "horas"
-    assert saida.alergias_medicamentosas.status == Status.NEGADO
-
-
-def test_duracao_e_alergia_do_relato_entram_quando_nao_ha_resposta_direta():
-    ext = Extracao(duracao=Duracao(valor=3, unidade="dias"),
-                   alergias_medicamentosas=AlergiasMedicamentosas(
-                       status=Status.PRESENTE, medicamentos=["dipirona"]))
-    saida = processar(ficha({"P01": "x"}), ext)
-    assert saida.duracao.valor == 3
-    assert saida.alergias_medicamentosas.medicamentos == ["dipirona"]
-    assert "P13" in saida.perguntas_pendentes  # ainda precisa da confirmação
-
-
-def test_extrator_so_e_chamado_com_p01():
-    falso = ExtratorFalso()
-    processar_ficha(ficha(), falso)
-    assert falso.chamadas == []
-    processar_ficha(ficha({"P01": "dor"}), falso)
-    assert falso.chamadas == ["dor"]
-
-
-def test_mock_extrator_extrai_apenas_o_citado():
-    ext = MockExtrator().extrair("Dor no peito há 2 horas, sem febre. Alérgico a dipirona e penicilina")
-    por_nome = {s.nome: s.status for s in ext.sinais}
-    assert por_nome == {NomeSinal.DOR: Status.PRESENTE, NomeSinal.FEBRE: Status.NEGADO}
-    assert ext.duracao == Duracao(valor=2, unidade="horas")
-    assert ext.alergias_medicamentosas.medicamentos == ["dipirona", "penicilina"]
-    assert all(s.origem == Origem.EXTRAIDO_DO_RELATO for s in ext.sinais)
-
-
-def test_criar_extrator():
-    assert isinstance(criar_extrator("mock"), MockExtrator)
-    with pytest.raises(ValueError):
-        criar_extrator("inexistente")
-
-
-# --- pontuação ------------------------------------------------------------------
-
-def test_pontuar_stub_devolve_numero_fixo_e_resultado_e_provisorio():
-    a = processar(ficha({"P06": True}))
-    b = processar(ficha({"P06": False, "P10": True}))
-    assert pontuar(a) == pontuar(b) == a.pontuacao
-    assert isinstance(a.pontuacao, int)
-    assert a.pontuacao_provisoria is True
-
-
-# --- validação -----------------------------------------------------------------
+# --- validação ------------------------------------------------------------------
 
 @pytest.mark.parametrize("f, trecho", [
     ({"respostas": {}}, "dados_atendente"),
-    (ficha(idade=None) | {"dados_atendente": {}}, "idade"),
-    (ficha({"P01": "x" * 201}), "P01"),
-    (ficha({"P02": {"valor": 2, "unidade": "luas"}}), "P02"),
-    (ficha({"P04": {"resposta": True}}), "P04"),
-    (ficha({"P05": "cotovelo"}), "P05"),
-    (ficha({"P06": "talvez"}), "P06"),
-    (ficha({"P09": {"resposta": True, "valor": 90}}), "P09"),
-    (ficha({"P12": {"gravida": False, "doenca_cronica": ["gripe"]}}), "P12"),
-    (ficha({"P13": {"resposta": True}}), "P13"),
-    (ficha({"P99": True}), "P99"),
+    ({"dados_atendente": {}, "respostas": {}}, "idade"),
+    ({"dados_atendente": {"idade": 30}, "respostas": {}, "extra": 1}, "extra"),
+    ({"dados_atendente": {"idade": 30, "pulso": 80}, "respostas": {}}, "pulso"),
+    (ficha({"Q01": "x" * 201}), "Q01"),
+    (ficha({"Q05": 11}), "Q05"),
+    (ficha({"Q09": "talvez"}), "Q09"),
+    (ficha({"Q99": True}), "Q99"),
+    (ficha({"Q10": {"resposta": False, "texto": "dipirona"}}), "Q10"),
+    (ficha(temperatura=200), "temperatura"),
+    (ficha(saturacao=float("nan")), "saturacao"),
+    (ficha(pressao_sistolica=80, pressao_diastolica=120), "menor que a diast"),
+    (ficha(pressao_sistolica=120), "juntas"),
+    (ficha(idade=-1), "idade"),
 ])
-def test_ficha_invalida_aponta_a_pergunta(f, trecho):
+def test_ficha_invalida_aponta_o_problema(f, trecho):
     with pytest.raises(FichaInvalida) as exc:
         processar(f)
     assert trecho in str(exc.value)
 
 
-def test_p01_com_exatamente_200_caracteres_e_aceita():
-    saida = processar(ficha({"P01": "x" * 200}))
-    assert len(saida.relato_original) == 200
+def test_ficha_que_nao_e_objeto():
+    with pytest.raises(FichaInvalida):
+        processar([])
 
 
-# --- CLI -------------------------------------------------------------------------
-
-def rodar(*args):
-    return subprocess.run([sys.executable, "-m", "triagem", *map(str, args)],
-                          capture_output=True, cwd=RAIZ)
-
-
-def test_cli_stdout_so_json_utf8_e_logs_no_stderr():
-    r = rodar(EXEMPLOS / "ficha_exemplo.json")
-    assert r.returncode == 0
-    texto = r.stdout.decode("utf-8")
-    saida = json.loads(texto)  # nada além do JSON no stdout
-    assert "\\u00" not in texto  # acentos sem escape ASCII
-    assert saida["extrator"] == "mock"
-    assert saida["pontuacao_provisoria"] is True
-    assert b"[INFO]" in r.stderr
+def test_todos_os_erros_sao_reportados_de_uma_vez():
+    with pytest.raises(FichaInvalida) as exc:
+        processar(ficha({"Q05": 11, "Q09": "talvez"}, idade=None) | {"dados_atendente": {}})
+    assert len(exc.value.erros) == 3
 
 
-def test_cli_extrator_mock_explicito_e_desconhecido():
-    ok = rodar(EXEMPLOS / "ficha_exemplo.json", "--extrator", "mock")
-    assert ok.returncode == 0
-    assert rodar(EXEMPLOS / "ficha_exemplo.json", "--extrator", "outro").returncode != 0
+def test_falha_de_validacao_nao_chama_o_extrator():
+    falso = ExtratorFalso()
+    with pytest.raises(FichaInvalida):
+        processar_ficha(ficha({"Q01": "dor", "Q09": "talvez"}), falso)
+    assert falso.chamadas == []
 
 
-@pytest.mark.parametrize("arquivo", sorted(p.name for p in EXEMPLOS.glob("*.json")
-                                          if not p.stem.endswith("_falha")))
-def test_cli_fichas_validas(arquivo):
-    r = rodar(EXEMPLOS / arquivo)
-    assert r.returncode == 0, r.stderr.decode("utf-8")
-    SaidaTriagem.model_validate(json.loads(r.stdout.decode("utf-8")))
+def test_relato_com_exatamente_200_caracteres():
+    assert len(processar(ficha({"Q01": "x" * 200})).relato_original) == 200
 
 
-@pytest.mark.parametrize("arquivo, pergunta", [
-    ("ficha_08_p01_201_falha.json", "P01"),
-    ("ficha_09_sem_idade_falha.json", "idade"),
-    ("ficha_10_tipo_resposta_errado_falha.json", "P06"),
-])
-def test_cli_fichas_invalidas(arquivo, pergunta):
-    r = rodar(EXEMPLOS / arquivo)
-    assert r.returncode != 0
-    assert r.stdout == b""
-    assert pergunta in r.stderr.decode("utf-8")
+# --- schema ----------------------------------------------------------------------------
+
+def test_schema_rejeita_relato_com_mais_de_200_caracteres():
+    with pytest.raises(ValidationError):
+        SaidaTriagem(relato_original="x" * 201, dados_atendente={"idade": 1}, extrator="f")
 
 
-def test_cli_arquivo_inexistente_e_json_quebrado(tmp_path):
-    assert rodar(tmp_path / "nao_existe.json").returncode != 0
-    quebrado = tmp_path / "q.json"
-    quebrado.write_text("{", encoding="utf-8")
-    r = rodar(quebrado)
-    assert r.returncode != 0 and r.stdout == b""
+def test_schema_rejeita_sinal_duplicado_nan_e_alergia_como_sinal():
+    s = Sinal(nome=NomeSinal.DOR, status=Status.PRESENTE, origem=Origem.RESPOSTA_DIRETA)
+    with pytest.raises(ValidationError):
+        SaidaTriagem(sinais=[s, s], dados_atendente={"idade": 1}, extrator="f")
+    with pytest.raises(ValidationError):
+        Sinal(nome=NomeSinal.DOR, status=Status.PRESENTE, valor=float("nan"), origem=Origem.NENHUMA)
+    with pytest.raises(ValidationError):
+        Sinal(nome="alergia", status=Status.PRESENTE, origem=Origem.NENHUMA)
+    with pytest.raises(ValidationError):
+        DadosAtendente(idade=30, temperatura=float("inf"))
 
 
-def test_cli_casos_especificos():
-    def saida(nome):
-        return json.loads(rodar(EXEMPLOS / nome).stdout.decode("utf-8"))
+def test_saida_traz_todos_os_sinais_uma_vez_e_a_versao_do_schema():
+    saida = processar(ficha())
+    assert [s.nome for s in saida.sinais] == list(NomeSinal)
+    assert saida.versao_schema == "0.2.0" and saida.extrator == "falso"
 
-    def sinais(s):
-        return {x["nome"]: x for x in s["sinais"]}
 
-    febre = sinais(saida("ficha_03_febre_com_valor.json"))["febre"]
-    assert (febre["status"], febre["valor"]) == ("presente", 38.7)
+# --- mapeamento e estados ----------------------------------------------------------------
 
-    pend = saida("ficha_02_perguntas_sem_resposta.json")["perguntas_pendentes"]
-    assert "P09" in pend and "P13" in pend and "P06" not in pend
+def test_sem_respostas_tudo_e_nao_mencionado_sem_origem():
+    saida = processar(ficha())
+    assert all(s.status in (Status.NAO_MENCIONADO, Status.NAO_SE_APLICA) and s.origem == Origem.NENHUMA
+               for s in saida.sinais)
+    assert saida.alergias.status == Status.NAO_MENCIONADO
 
-    p13 = saida("ficha_04_alergia_p13.json")["alergias_medicamentosas"]
-    assert p13 == {"status": "presente", "medicamentos": ["dipirona", "penicilina"]}
 
-    so_relato = saida("ficha_05_alergia_so_na_extracao.json")
-    assert so_relato["alergias_medicamentosas"]["medicamentos"] == ["dipirona"]
-    assert "P13" in so_relato["perguntas_pendentes"]
+def test_afericoes_viram_sinais_medidos_com_valor():
+    saida = processar(ficha(temperatura=39.2, saturacao=88, frequencia_cardiaca=120, pressao_sistolica=85,
+                            pressao_diastolica=50, frequencia_respiratoria=26, glicemia=50, glasgow=13))
+    for nome in ("febre_atual", "hipoxemia", "taquicardia", "hipotensao", "taquipneia",
+                 "glicemia_alterada", "glasgow_reduzido"):
+        s = sinal(saida, NomeSinal(nome))
+        assert s.status == Status.PRESENTE and s.origem == Origem.MEDIDO_PELO_ATENDENTE and s.valor is not None
+    normal = processar(ficha(temperatura=36.5, saturacao=98))
+    assert sinal(normal, NomeSinal.FEBRE_ATUAL).status == Status.NEGADO
+    assert sinal(normal, NomeSinal.TAQUICARDIA).status == Status.NAO_MENCIONADO  # não aferido != normal
 
-    div = sinais(saida("ficha_06_divergencia_extracao_x_direta.json"))["dispneia"]
-    assert (div["status"], div["origem"]) == ("negado", "resposta_direta")
+
+def test_limite_de_febre_depende_da_idade():
+    assert sinal(processar(ficha(idade=40, temperatura=37.6)), NomeSinal.FEBRE_ATUAL).status == Status.NEGADO
+    assert sinal(processar(ficha(idade=5, temperatura=37.6)), NomeSinal.FEBRE_ATUAL).status == Status.PRESENTE
+
+
+def test_crianca_nao_tem_limites_de_adulto_e_gera_alerta():
+    saida = processar(ficha(idade=6, saturacao=80, frequencia_cardiaca=140))
+    assert sinal(saida, NomeSinal.HIPOXEMIA).status == Status.NAO_MENCIONADO
+    assert alerta(saida, "limites_pediatricos")
+
+
+def test_afericoes_faltando_essenciais_e_condicionais():
+    assert processar(ficha()).afericoes_faltando == ["E01", "E02", "E03", "E04"]
+    completo = ficha(temperatura=36, saturacao=98, pressao_sistolica=120, pressao_diastolica=80,
+                     frequencia_cardiaca=70)
+    assert processar(completo).afericoes_faltando == []
+    com_dispneia = completo | {"respostas": {"Q09": True}}
+    assert processar(com_dispneia).afericoes_faltando == ["E05"]
+    consciencia = completo | {"respostas": {"Q08": True}}
+    assert processar(consciencia).afericoes_faltando == ["E06", "E07"]
+
+
+def test_q10_preenche_alergias_fora_dos_sinais():
+    saida = processar(ficha({"Q10": {"resposta": True, "tipos": ["medicamento"], "texto": "dipirona, penicilina"}}))
+    assert saida.alergias.status == Status.PRESENTE and saida.alergias.itens == ["dipirona", "penicilina"]
+    assert "Q10" not in saida.perguntas_pendentes
+    assert "alergia" not in {n.value for n in NomeSinal}
+
+
+def test_duracao_vem_de_q02():
+    saida = processar(ficha({"Q02": {"inicio": "aos_poucos", "duracao": {"valor": 2, "unidade": "horas"}}}))
+    assert saida.duracao == Duracao(valor=2, unidade="horas")
+
+
+# --- perguntas pendentes -----------------------------------------------------------------------
+
+def test_pendentes_em_ordem_de_prioridade_e_sem_complementares():
+    saida = processar(ficha(sexo="ausente"))
+    nucleo = saida.perguntas_pendentes
+    assert nucleo[0] == saida.proxima_pergunta == "Q08"
+    assert nucleo.index("Q15") < nucleo.index("Q01")  # segurança vem antes do núcleo
+    assert not any(p.startswith(("C", "T", "A", "R")) for p in nucleo)  # sem módulo ativo nem complementares
+
+
+def test_pergunta_respondida_sai_das_pendentes():
+    saida = processar(ficha({"Q08": False, "Q10": {"resposta": False}}))
+    assert "Q08" not in saida.perguntas_pendentes and "Q10" not in saida.perguntas_pendentes
+    assert "Q09" in saida.perguntas_pendentes
+
+
+def test_pergunta_pela_metade_continua_pendente_e_gera_alerta():
+    saida = processar(ficha({"Q12": {"resposta": True}}))
+    assert "Q12" in saida.perguntas_pendentes
+    assert alerta(saida, "dado_incompleto")
+
+
+def test_nao_sabe_e_recusou_nao_ficam_pendentes_mas_avisam():
+    saida = processar(ficha({"Q08": "nao_sabe", "Q10": "recusou"}))
+    assert "Q08" not in saida.perguntas_pendentes and "Q10" not in saida.perguntas_pendentes
+    assert sinal(saida, NomeSinal.ALTERACAO_CONSCIENCIA).status == Status.NAO_SABE
+    assert saida.alergias.status == Status.RECUSOU
+    assert alerta(saida, "dado_desconhecido")[0].referencias == ["Q08", "Q10"]
+
+
+def test_q15_depende_de_sexo_e_idade():
+    assert "Q15" not in processar(ficha(sexo="masculino")).perguntas_pendentes
+    assert "Q15" not in processar(ficha(sexo="feminino", idade=70)).perguntas_pendentes
+    assert "Q15" in processar(ficha(sexo="feminino", idade=30)).perguntas_pendentes
+    assert "Q15" in processar(ficha(sexo="ausente", idade=30)).perguntas_pendentes
+    homem = processar(ficha(sexo="masculino"))
+    assert sinal(homem, NomeSinal.GRAVIDEZ_POSSIVEL).status == Status.NAO_SE_APLICA
+
+
+def test_modulo_so_entra_quando_ativo():
+    sem = processar(ficha({"Q01": "dor de cabeça"}))
+    assert sem.modulos_ativos == [] and not any(p[0] in "TAR" for p in sem.perguntas_pendentes)
+    ext = Extracao(queixas=[Queixa.DOR_TORACICA])
+    com = processar(ficha({"Q01": "dor no peito"}), ext)
+    assert com.modulos_ativos == ["dor_toracica"] and {"T01", "T02", "T03"} <= set(com.perguntas_pendentes)
+    por_resposta = processar(ficha({"A04": True}))
+    assert por_resposta.modulos_ativos == ["dor_abdominal"]
+    por_sinal = processar(ficha(temperatura=39))
+    assert por_sinal.modulos_ativos == ["respiratorio_febre"]
+
+
+def test_sem_modulo_gera_alerta_apenas_com_relato_extraido():
+    assert alerta(processar(ficha({"Q01": "vim renovar receita"}), Extracao()), "sem_modulo")
+    assert not alerta(processar(ficha()), "sem_modulo")
+
+
+# --- extração e mesclagem -----------------------------------------------------------------------
+
+def test_extrator_so_e_chamado_com_relato():
+    falso = ExtratorFalso()
+    processar_ficha(ficha(), falso)
+    assert falso.chamadas == []
+    processar_ficha(ficha({"Q01": "dor"}), falso)
+    assert falso.chamadas == ["dor"]
+
+
+def test_sinal_do_relato_entra_com_origem_e_trecho():
+    ext = Extracao(queixa_principal="dor no peito", queixas=[Queixa.DOR_TORACICA],
+                   sinais=[citado(NomeSinal.DOR, trecho="dor no peito")])
+    saida = processar(ficha({"Q01": "dor no peito"}), ext)
+    dor = sinal(saida, NomeSinal.DOR)
+    assert (dor.status, dor.origem, dor.trecho) == (Status.PRESENTE, Origem.EXTRAIDO_DO_RELATO, "dor no peito")
+    assert saida.queixa_principal == "dor no peito" and saida.queixas == [Queixa.DOR_TORACICA]
+
+
+def test_pergunta_nao_respondida_segue_pendente_mesmo_com_sinal_no_relato():
+    saida = processar(ficha({"Q01": "falta de ar"}), Extracao(sinais=[citado(NomeSinal.DISPNEIA)]))
+    assert sinal(saida, NomeSinal.DISPNEIA).origem == Origem.EXTRAIDO_DO_RELATO
+    assert "Q09" in saida.perguntas_pendentes
+
+
+def test_resposta_direta_prevalece_e_a_divergencia_e_visivel():
+    ext = Extracao(sinais=[citado(NomeSinal.DISPNEIA)])
+    saida = processar(ficha({"Q01": "falta de ar", "Q09": False}), ext)
+    s = sinal(saida, NomeSinal.DISPNEIA)
+    assert (s.status, s.origem, s.status_no_relato) == (Status.NEGADO, Origem.RESPOSTA_DIRETA, Status.PRESENTE)
+    assert alerta(saida, "divergencia")[0].referencias == ["dispneia"]
+    assert "Q09" in saida.perguntas_pendentes  # pede confirmação
+
+
+def test_relato_incerto_ou_igual_nao_e_divergencia():
+    ext = Extracao(sinais=[citado(NomeSinal.DISPNEIA, Status.INCERTO)])
+    assert not alerta(processar(ficha({"Q01": "x", "Q09": False}), ext), "divergencia")
+    ext = Extracao(sinais=[citado(NomeSinal.DISPNEIA)])
+    assert not alerta(processar(ficha({"Q01": "x", "Q09": True}), ext), "divergencia")
+
+
+def test_resposta_nao_sabe_cede_ao_relato():
+    ext = Extracao(sinais=[citado(NomeSinal.DISPNEIA)])
+    s = sinal(processar(ficha({"Q01": "x", "Q09": "nao_sabe"}), ext), NomeSinal.DISPNEIA)
+    assert s.status == Status.PRESENTE and s.origem == Origem.EXTRAIDO_DO_RELATO
+
+
+def test_duracao_direta_prevalece_e_divergencia_vira_alerta():
+    ext = Extracao(duracao=Duracao(valor=9, unidade="dias"))
+    saida = processar(ficha({"Q01": "x", "Q02": {"inicio": "aos_poucos", "duracao": {"valor": 2, "unidade": "horas"}}}), ext)
+    assert saida.duracao.unidade.value == "horas" and alerta(saida, "duracao_divergente")
+    parecida = processar(ficha({"Q01": "x", "Q02": {"inicio": "aos_poucos", "duracao": {"valor": 24, "unidade": "horas"}}}),
+                         Extracao(duracao=Duracao(valor=1, unidade="dias")))
+    assert not alerta(parecida, "duracao_divergente")
+    so_relato = processar(ficha({"Q01": "x"}), Extracao(duracao=Duracao(valor=3, unidade="dias")))
+    assert so_relato.duracao.valor == 3
+
+
+def test_alergia_do_relato_so_entra_sem_resposta_direta():
+    ext = Extracao(alergias=Alergias(status=Status.PRESENTE, itens=["dipirona"]))
+    saida = processar(ficha({"Q01": "x"}), ext)
+    assert saida.alergias.itens == ["dipirona"] and "Q10" in saida.perguntas_pendentes
+    negada = processar(ficha({"Q01": "x", "Q10": {"resposta": False}}), ext)
+    assert negada.alergias.status == Status.NEGADO and alerta(negada, "alergia_divergente")
+
+
+def test_falha_do_extrator_degrada_sem_perder_as_respostas():
+    saida = processar(ficha({"Q01": "dor", "Q09": True}), erro=RuntimeError("Ollama fora do ar"))
+    assert sinal(saida, NomeSinal.DISPNEIA).status == Status.PRESENTE  # resposta direta preservada
+    assert alerta(saida, "extracao_falhou") and "Q01" in saida.perguntas_pendentes
+    assert saida.queixa_principal is None
+
+
+def test_avisos_de_descarte_do_extrator_ficam_visiveis():
+    saida = processar(ficha({"Q01": "x"}), Extracao(avisos=["sinal 'x' descartado"]))
+    assert alerta(saida, "extracao_avisos")
+
+
+def test_contrato_do_extrator_e_aplicado_pelo_modelo():
+    for ruim in ({"sinais": [Sinal(nome=NomeSinal.HIPOXEMIA, status=Status.PRESENTE, origem=Origem.EXTRAIDO_DO_RELATO)]},
+                 {"sinais": [citado(NomeSinal.DOR, Status.NAO_SE_APLICA)]},
+                 {"sinais": [Sinal(nome=NomeSinal.DOR, status=Status.PRESENTE, origem=Origem.RESPOSTA_DIRETA)]},
+                 {"alergias": Alergias(status=Status.NEGADO)}):
+        with pytest.raises(ValidationError):
+            Extracao(**ruim)
+
+
+# --- alertas clínicos -----------------------------------------------------------------------------
+
+def test_febre_mascarada_por_antitermico():
+    f = ficha({"R01": {"febre": True, "calafrios": False},
+               "Q12": {"resposta": True, "classes": ["antitermico"]}}, temperatura=36.7)
+    assert alerta(processar(f), "febre_mascarada")
+    sem_remedio = ficha({"R01": {"febre": True, "calafrios": False}, "Q12": {"resposta": False}}, temperatura=36.7)
+    assert not alerta(processar(sem_remedio), "febre_mascarada")
+
+
+def test_paciente_nega_febre_mas_termometro_marca():
+    saida = processar(ficha({"R01": {"febre": False, "calafrios": False}}, temperatura=39.2))
+    assert alerta(saida, "febre_nao_referida")
+    assert sinal(saida, NomeSinal.FEBRE_ATUAL).status == Status.PRESENTE
+
+
+def test_regra_de_alerta_grave_avisa_a_enfermagem():
+    saida = processar(ficha({"Q08": True}))
+    assert [a.referencias for a in alerta(saida, "sinal_de_alerta")] == [["RC-01"]]
+    assert not alerta(processar(ficha({"Q08": False})), "sinal_de_alerta")
