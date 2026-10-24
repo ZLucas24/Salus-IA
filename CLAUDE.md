@@ -32,6 +32,8 @@ Python 3.11+. Pacote `triagem`, executado com `python -m triagem`.
 - `triagem/dados/questionario.json`: banco de perguntas (fonte única). O roteiro em
   `docs/roteiro_entrevista.md` é GERADO por `python -m triagem.roteiro`; não editar à mão.
 - `triagem/dados/regras.json`: limites das aferições, pesos e regras de cor.
+- `triagem/interface/`: interface web local (stdlib; `python -m triagem.interface`). O formulário
+  nasce do questionário; a página nunca usa `innerHTML` nem recursos externos (há teste).
 - `triagem/entrevista.py`: fluxo em etapas (validar, interpretar, extrair, mesclar,
   pendências, alertas, pontuar).
 - `agente_triagem.md` e `arquivos de arquitetura/`: documentos da equipe (Anna).

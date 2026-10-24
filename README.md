@@ -82,6 +82,7 @@ Há fichas de exemplo em [exemplos/](exemplos/), incluindo quatro que falham de 
 | Comando | O que faz |
 |---|---|
 | `python -m triagem ficha.json` | entrevista completa: JSON de saída no stdout |
+| `python -m triagem.interface --abrir` | **interface web** local: formulário de entrevista e painel de resultado |
 | `python -m triagem.relato "dor no peito há 2 horas"` | só a extração de um relato (queixa, sinais, duração) |
 | `python -m triagem.avaliar --alvo mock --alvo ollama:llama3.1:8b` | compara extratores com o gabarito simulado |
 | `python -m triagem.roteiro` | regenera o roteiro de entrevista a partir do questionário |
@@ -97,6 +98,23 @@ do stdin (o mesmo vale para o relato, que assim não fica no histórico do termi
   significa extrator indisponível ou com resposta inválida.
 - **Se o modelo falhar**, a ficha continua: sai só com as respostas diretas, com o alerta
   `extracao_falhou`, e a Q01 permanece pendente.
+
+## Interface web
+
+```bash
+python -m triagem.interface --abrir     # http://127.0.0.1:8765/
+```
+
+Formulário de entrevista gerado a partir do próprio questionário (perguntas de segurança, núcleo,
+módulos e complementares), com cadastro e aferições, e um painel de resultado que se atualiza
+enquanto você digita: **cor e pontuação sugeridas** (marcadas como provisórias), **alertas**,
+**próxima pergunta** e pendências (clicáveis), sinais presentes com origem e trecho do relato,
+alergias, as regras que geraram o resultado e o JSON completo. Há um seletor de fichas de exemplo,
+inclusive as inválidas de propósito, e um botão para escolher o extrator (mock ou modelo local).
+
+Roda só na sua máquina: escuta apenas em `127.0.0.1`, confere `Host` e `Origin`, não carrega nada
+de fora (sem CDN nem fontes externas), e o texto digitado nunca vira HTML. Não usa nenhuma
+dependência além da biblioteca padrão.
 
 ## Exemplo de saída
 

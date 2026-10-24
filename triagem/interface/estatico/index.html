@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SalUS.ia — Triagem</title>
+  <meta name="description" content="Copiloto de triagem para UPAs e prontos-socorros do SUS (protótipo com dados simulados).">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%230b6b5f'/%3E%3Cpath d='M13 7h6v6h6v6h-6v6h-6v-6H7v-6h6z' fill='white'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/estatico/estilo.css">
+</head>
+<body>
+  <a class="pular" href="#resultado">Ir para o resultado</a>
+
+  <div class="faixa" role="note">
+    <strong>Protótipo com dados simulados.</strong>
+    As regras de cor e pontuação são propostas da equipe e <strong>ainda não foram validadas por profissional de saúde</strong>.
+    A decisão final é sempre do profissional.
+  </div>
+
+  <header class="topo">
+    <div class="marca">
+      <span class="logo" aria-hidden="true">+</span>
+      <div>
+        <h1>Sal<span>US</span>.ia</h1>
+        <p>Copiloto de triagem para UPAs e prontos-socorros do SUS</p>
+      </div>
+    </div>
+    <div class="selos">
+      <span class="selo" id="selo-regras">regras não validadas</span>
+      <span class="selo neutro" id="selo-versao"></span>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="coluna" aria-labelledby="titulo-entrevista">
+      <div class="cartao barra">
+        <h2 id="titulo-entrevista">Entrevista</h2>
+        <div class="controles">
+          <label class="campo-inline">Exemplo
+            <select id="exemplo"><option value="">Carregar um exemplo…</option></select>
+          </label>
+          <button type="button" class="pilula secundaria" id="limpar">Limpar ficha</button>
+        </div>
+        <div class="controles">
+          <label class="campo-inline">Leitura do relato
+            <select id="extrator"></select>
+          </label>
+          <label class="check"><input type="checkbox" id="auto" checked> Atualizar enquanto digito</label>
+          <button type="button" class="pilula" id="analisar">Analisar</button>
+        </div>
+        <p class="dica" id="dica-extrator"></p>
+      </div>
+
+      <div id="cadastro"></div>
+      <div id="perguntas"></div>
+    </section>
+
+    <aside class="coluna resultado" id="resultado" aria-labelledby="titulo-resultado" tabindex="-1">
+      <h2 id="titulo-resultado" class="so-leitor">Resultado da triagem</h2>
+      <div id="painel" aria-live="polite">
+        <div class="cartao vazio"><p>Preencha a idade para ver a triagem.</p></div>
+      </div>
+    </aside>
+  </main>
+
+  <footer class="rodape">
+    Salus IA · protótipo de hackathon · nenhum dado sai desta máquina, a menos que o modelo configurado seja remoto.
+  </footer>
+
+  <a class="mini" id="mini" href="#resultado" hidden></a>
+
+  <script src="/estatico/app.js"></script>
+</body>
+</html>
