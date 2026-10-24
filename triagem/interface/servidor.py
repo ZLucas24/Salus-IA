@@ -136,21 +136,30 @@ class Manipulador(BaseHTTPRequestHandler):
             return self._erro(HTTPStatus.NOT_FOUND, "não encontrado")
         self._enviar(200, arquivo.read_bytes(), TIPOS[arquivo.suffix])
 
+    def _ler_corpo(self) -> bytes | None:
+        """Lê o corpo antes de qualquer resposta (o Windows derruba a conexão se sobrar corpo
+        não lido). Devolve None se o tamanho for ausente, nulo ou acima do limite."""
+        try:
+            tamanho = int(self.headers.get("Content-Length", ""))
+        except ValueError:
+            return None
+        if not 0 < tamanho <= LIMITE_CORPO:
+            return None
+        return self.rfile.read(tamanho)
+
     def do_POST(self):
+        corpo_bruto = self._ler_corpo()
         if not self._origem_confiavel(True):
             return self._erro(HTTPStatus.FORBIDDEN, "origem não permitida")
         if self.path.split("?", 1)[0] != "/api/triagem":
             return self._erro(HTTPStatus.NOT_FOUND, "não encontrado")
         if not self.headers.get("Content-Type", "").startswith("application/json"):
             return self._erro(HTTPStatus.UNSUPPORTED_MEDIA_TYPE, "envie application/json")
+        if corpo_bruto is None:
+            self.close_connection = True
+            return self._erro(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, "corpo ausente, vazio ou grande demais")
         try:
-            tamanho = int(self.headers.get("Content-Length", ""))
-        except ValueError:
-            return self._erro(HTTPStatus.LENGTH_REQUIRED, "Content-Length obrigatório")
-        if not 0 < tamanho <= LIMITE_CORPO:
-            return self._erro(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, "corpo vazio ou grande demais")
-        try:
-            corpo = json.loads(self.rfile.read(tamanho).decode("utf-8-sig"))
+            corpo = json.loads(corpo_bruto.decode("utf-8-sig"))
             ficha, extrator = corpo["ficha"], corpo.get("extrator", NOME_PADRAO)
         except (ValueError, KeyError, TypeError, AttributeError):
             return self._erro(HTTPStatus.BAD_REQUEST, 'JSON inválido; esperado {"ficha": {...}}')
