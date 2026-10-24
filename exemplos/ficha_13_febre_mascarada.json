@@ -1,0 +1,55 @@
+{
+  "dados_atendente": {
+    "idade": 34,
+    "sexo_biologico": "masculino",
+    "temperatura": 36.7,
+    "saturacao": 98,
+    "pressao_sistolica": 120,
+    "pressao_diastolica": 80,
+    "frequencia_cardiaca": 78,
+    "frequencia_respiratoria": 16
+  },
+  "respostas": {
+    "Q01": "Tive febre ontem",
+    "Q02": {
+      "inicio": "aos_poucos",
+      "duracao": {
+        "valor": 3,
+        "unidade": "dias"
+      }
+    },
+    "Q03": "igual",
+    "Q04": "pontada",
+    "Q05": 3,
+    "Q06": {
+      "resposta": false
+    },
+    "Q07": "melhora com repouso",
+    "Q08": false,
+    "Q09": false,
+    "Q10": {
+      "resposta": false
+    },
+    "Q11": {
+      "resposta": false
+    },
+    "Q12": {
+      "resposta": true,
+      "classes": [
+        "antitermico"
+      ],
+      "texto": "dipirona",
+      "ha": {
+        "valor": 3,
+        "unidade": "horas"
+      }
+    },
+    "Q13": [],
+    "Q14": [],
+    "R01": {
+      "febre": true,
+      "maior_temperatura": 39,
+      "calafrios": false
+    }
+  }
+}
