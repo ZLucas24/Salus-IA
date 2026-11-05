@@ -1,37 +1,54 @@
 {
   "dados_atendente": {
-    "idade": 34
+    "idade": 34,
+    "sexo_biologico": "masculino",
+    "temperatura": 39.2,
+    "saturacao": 98,
+    "pressao_sistolica": 120,
+    "pressao_diastolica": 80,
+    "frequencia_cardiaca": 78,
+    "frequencia_respiratoria": 16
   },
   "respostas": {
-    "P01": "Febre e dor no corpo",
-    "P02": {
-      "valor": 3,
-      "unidade": "dias"
+    "Q01": "Febre e dor no corpo",
+    "Q02": {
+      "inicio": "aos_poucos",
+      "duracao": {
+        "valor": 3,
+        "unidade": "dias"
+      }
     },
-    "P03": false,
-    "P04": {
+    "Q03": "igual",
+    "Q04": "pontada",
+    "Q05": 3,
+    "Q06": {
       "resposta": false
     },
-    "P06": false,
-    "P07": {
-      "ha_sangramento": false
-    },
-    "P08": {
-      "desmaiou_ou_confuso": false,
-      "convulsao": false
-    },
-    "P09": {
-      "resposta": true,
-      "valor": 38.7
-    },
-    "P10": false,
-    "P11": false,
-    "P12": {
-      "gravida": false,
-      "doenca_cronica": []
-    },
-    "P13": {
+    "Q07": "melhora com repouso",
+    "Q08": false,
+    "Q09": false,
+    "Q10": {
       "resposta": false
-    }
+    },
+    "Q11": {
+      "resposta": false
+    },
+    "Q12": {
+      "resposta": false
+    },
+    "Q13": [],
+    "Q14": [],
+    "R01": {
+      "febre": true,
+      "maior_temperatura": 39.5,
+      "calafrios": true
+    },
+    "R02": true,
+    "R03": {
+      "chiado": false,
+      "tosse_com_sangue": false
+    },
+    "R04": false,
+    "R05": true
   }
 }

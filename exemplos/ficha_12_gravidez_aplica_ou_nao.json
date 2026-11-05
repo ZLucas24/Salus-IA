@@ -1,0 +1,42 @@
+{
+  "dados_atendente": {
+    "idade": 26,
+    "sexo_biologico": "feminino",
+    "temperatura": 36.6,
+    "saturacao": 98,
+    "pressao_sistolica": 120,
+    "pressao_diastolica": 80,
+    "frequencia_cardiaca": 78,
+    "frequencia_respiratoria": 16
+  },
+  "respostas": {
+    "Q01": "Dor na barriga há 1 dia",
+    "Q02": {
+      "inicio": "aos_poucos",
+      "duracao": {
+        "valor": 3,
+        "unidade": "dias"
+      }
+    },
+    "Q03": "igual",
+    "Q04": "pontada",
+    "Q05": 3,
+    "Q06": {
+      "resposta": false
+    },
+    "Q07": "melhora com repouso",
+    "Q08": false,
+    "Q09": false,
+    "Q10": {
+      "resposta": false
+    },
+    "Q11": {
+      "resposta": false
+    },
+    "Q12": {
+      "resposta": false
+    },
+    "Q13": [],
+    "Q14": []
+  }
+}

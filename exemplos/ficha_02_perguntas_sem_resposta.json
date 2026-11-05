@@ -3,11 +3,10 @@
     "idade": 41
   },
   "respostas": {
-    "P01": "Dor de barriga desde ontem",
-    "P02": {
-      "valor": 1,
-      "unidade": "dias"
+    "Q01": "Dor de barriga desde ontem",
+    "Q02": {
+      "inicio": "aos_poucos"
     },
-    "P06": false
+    "Q09": false
   }
 }

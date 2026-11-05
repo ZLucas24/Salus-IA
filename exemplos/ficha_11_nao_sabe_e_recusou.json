@@ -1,0 +1,40 @@
+{
+  "dados_atendente": {
+    "idade": 34,
+    "sexo_biologico": "masculino",
+    "temperatura": 36.6,
+    "saturacao": 98,
+    "pressao_sistolica": 120,
+    "pressao_diastolica": 80,
+    "frequencia_cardiaca": 78,
+    "frequencia_respiratoria": 16
+  },
+  "respostas": {
+    "Q01": "Mal-estar",
+    "Q02": {
+      "inicio": "aos_poucos",
+      "duracao": {
+        "valor": 3,
+        "unidade": "dias"
+      }
+    },
+    "Q03": "igual",
+    "Q04": "pontada",
+    "Q05": 3,
+    "Q06": {
+      "resposta": false
+    },
+    "Q07": "melhora com repouso",
+    "Q08": "nao_sabe",
+    "Q09": false,
+    "Q10": "recusou",
+    "Q11": {
+      "resposta": "nao_sabe"
+    },
+    "Q12": {
+      "resposta": false
+    },
+    "Q13": [],
+    "Q14": []
+  }
+}

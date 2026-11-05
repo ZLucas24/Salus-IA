@@ -1,36 +1,42 @@
 {
   "dados_atendente": {
-    "idade": 34
+    "idade": 34,
+    "sexo_biologico": "masculino",
+    "temperatura": 36.6,
+    "saturacao": 98,
+    "pressao_sistolica": 120,
+    "pressao_diastolica": 80,
+    "frequencia_cardiaca": 78,
+    "frequencia_respiratoria": 16
   },
   "respostas": {
-    "P01": "Dor de garganta leve e tosse",
-    "P02": {
-      "valor": 3,
-      "unidade": "dias"
+    "Q01": "Dor de cabeça leve há 3 dias",
+    "Q02": {
+      "inicio": "aos_poucos",
+      "duracao": {
+        "valor": 3,
+        "unidade": "dias"
+      }
     },
-    "P03": false,
-    "P04": {
+    "Q03": "igual",
+    "Q04": "pontada",
+    "Q05": 11,
+    "Q06": {
+      "resposta": false
+    },
+    "Q07": "melhora com repouso",
+    "Q08": false,
+    "Q09": "talvez",
+    "Q10": {
       "resposta": true
     },
-    "P06": "talvez",
-    "P07": {
-      "ha_sangramento": false
-    },
-    "P08": {
-      "desmaiou_ou_confuso": false,
-      "convulsao": false
-    },
-    "P09": {
+    "Q11": {
       "resposta": false
     },
-    "P10": false,
-    "P11": false,
-    "P12": {
-      "gravida": false,
-      "doenca_cronica": []
-    },
-    "P13": {
+    "Q12": {
       "resposta": false
-    }
+    },
+    "Q13": [],
+    "Q14": []
   }
 }
