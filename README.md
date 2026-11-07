@@ -16,6 +16,16 @@ essa ficha e devolve um JSON padronizado com:
 > atendimento real. **Os limites, as regras de cor e os pesos ainda não foram revisados por
 > enfermeiro ou médico.** A decisão final é sempre do profissional de saúde.
 
+## Apresentação
+
+Material do pitch no AKCIT Camp 2026, em [docs/apresentacao/](docs/apresentacao/):
+
+| Arquivo | O que é |
+|---|---|
+| [pitch_deck.pdf](docs/apresentacao/pitch_deck.pdf) | pitch deck (10 slides): problema, solução, segurança, mercado, modelo de negócio e próximos passos |
+| [business_model_canvas.pdf](docs/apresentacao/business_model_canvas.pdf) | Business Model Canvas, com o que já existe, o que é hipótese e como validar |
+| [demo_agente.mp4](docs/apresentacao/demo_agente.mp4) | vídeo de demonstração do agente de triagem |
+
 ## Sumário
 
 1. [Princípios](#princípios)
@@ -577,6 +587,7 @@ triagem/
 exemplos/                 fichas simuladas
 avaliacao/                gabarito do extrator
 docs/roteiro_entrevista.md  roteiro do atendente (gerado)
+docs/apresentacao/          pitch deck, canvas e vídeo de demonstração
 tests/                    testes automatizados
 agente_triagem.md         instruções do agente e banco de perguntas (equipe)
 arquivos de arquitetura/  projeto, riscos, legislação, linha do tempo, pontos de discussão (equipe)
