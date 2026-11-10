@@ -5,6 +5,7 @@ from enum import Enum
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from triagem.sinais import Cor, NomeSinal, Origem, Queixa, SexoBiologico, Status
+from triagem.texto import MAX_RELATO
 
 VERSAO_SCHEMA = "0.2.0"
 
@@ -100,7 +101,7 @@ class Classificacao(BaseModel):
 
 
 class SaidaTriagem(BaseModel):
-    relato_original: str = Field(default="", max_length=200)
+    relato_original: str = Field(default="", max_length=MAX_RELATO)
     respostas: list[Resposta] = Field(default_factory=list)
     queixa_principal: str | None = None
     queixas: list[Queixa] = Field(default_factory=list)

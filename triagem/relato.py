@@ -31,7 +31,7 @@ def main(argv: list[str] | None = None) -> int:
         prog="python -m triagem.relato",
         description="Extrai queixa e sinais de um relato em texto livre. Use apenas dados "
                     "simulados; o relato nunca deve conter dados reais de pacientes.")
-    parser.add_argument("relato", help="texto do relato (até 200 caracteres), ou - para ler do stdin")
+    parser.add_argument("relato", help="texto do relato (até 1000 caracteres), ou - para ler do stdin")
     parser.add_argument("--extrator", choices=NOMES_EXTRATORES, default=NOME_PADRAO,
                         help="implementação do extrator (padrão: %(default)s)")
     parser.add_argument("-q", "--silencioso", action="store_true", help="só avisos e erros no stderr")

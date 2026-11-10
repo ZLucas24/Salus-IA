@@ -208,7 +208,9 @@ function criarPergunta(p, mudou) {
     marcadores.querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.marcador === marcador)));
   }
   return {
-    id: p.id, el, selo, nota,
+    id: p.id, el, selo, nota, simples,
+    partes: Object.fromEntries(itens.map((i) => [i.parte.nome, i])),
+    temMarcador: () => marcador !== undefined,
     get() {
       if (marcador) return marcador;
       if (simples) return itens[0].get();
@@ -312,6 +314,8 @@ async function calcular() {
   const painel = $('#painel');
   const minha = ++estado.seq;
   if (ficha.dados_atendente.idade === undefined) {
+    estado.saida = null;
+    renderVoz();
     painel.dataset.desatualizado = '';
     painel.replaceChildren(h('div', { class: 'cartao vazio' }, h('p', { texto: 'Preencha a idade para ver a triagem.' })));
     limparMarcas();
@@ -405,6 +409,7 @@ function atualizarMini(c) {
 }
 
 function mostrarSaida(s) {
+  estado.saida = s;
   marcarPerguntas(s);
   const c = s.classificacao;
   atualizarMini(c);
@@ -416,7 +421,9 @@ function mostrarSaida(s) {
       h('span', { class: `cor-selo cor-${c.cor}`, texto: `Cor sugerida: ${c.cor}` }),
       h('span', { class: 'nota' }, String(c.pontuacao), h('small', { texto: ' / 100 dentro da cor' }))),
     h('div', { class: `medidor cor-${c.cor}`, role: 'img', 'aria-label': `Pontuação ${c.pontuacao} de 100` }, h('span', { style: `width:${c.pontuacao}%` })),
-    h('p', { class: 'provisoria', texto: `Sugestão provisória. ${c.regras_validadas ? '' : 'As regras ainda não foram validadas por profissional de saúde. '}A decisão final é do profissional.` })));
+    h('p', { class: 'provisoria', texto: `Sugestão provisória. ${c.regras_validadas ? '' : 'As regras ainda não foram validadas por profissional de saúde. '}A decisão final é do profissional.` }),
+    h('div', { class: 'controles' }, h('button', { type: 'button', class: 'pilula', texto: 'Colocar na fila', onclick: colocarNaFila }),
+      h('span', { class: 'dica', texto: 'Gera o número de atendimento e o QR do paciente.' }))));
 
   if (s.proxima_pergunta) {
     const p = estado.dados.perguntas.find((x) => x.id === s.proxima_pergunta);
@@ -473,6 +480,282 @@ function mostrarSaida(s) {
     h('pre', { texto: json }))));
 
   painel.replaceChildren(...cartoes);
+  renderVoz();
+}
+
+/* ---------------------------------------------------------------- entrevista por voz */
+// O enfermeiro fala; o servidor transcreve na máquina e interpreta por código. Nada entra na
+// ficha sem o enfermeiro clicar em "Confirmar". Ordem: segurança -> relato -> pendências.
+
+const voz = { pulados: new Set(), chave: null, gravador: null, pedacos: [], ocupado: false, resultado: null, limite: null };
+const FASES = ['Perguntas de segurança', 'Relato do paciente', 'Perguntas complementares'];
+
+function partesPendentes(id) {
+  const c = estado.perguntas[id];
+  if (!c || c.temMarcador()) return [];
+  return Object.values(c.partes).filter(({ parte, get }) => {
+    const dep = parte.depende_de;
+    if (dep && c.partes[dep.parte].get() !== dep.igual) return false;
+    return get() === undefined;
+  }).map((i) => i.parte.nome);
+}
+
+function proximoPasso() {
+  const q = estado.dados;
+  const fases = [
+    q.perguntas.filter((p) => p.obrigatoriedade === 'S').map((p) => p.id),
+    ['Q01'],
+    estado.saida ? estado.saida.perguntas_pendentes : [],
+  ];
+  for (const [fase, ids] of fases.entries()) {
+    for (const id of ids) {
+      if (estado.perguntas[id].el.classList.contains('inativa')) continue; // não se aplica ao paciente
+      for (const parte of partesPendentes(id)) {
+        if (!voz.pulados.has(`${id}.${parte}`)) return { fase, id, parte };
+      }
+    }
+  }
+  return null;
+}
+
+function dicaDaParte(parte) {
+  switch (parte.forma) {
+    case 'sim_nao': return 'Diga "sim", "não", "não sabe" ou "recusou".';
+    case 'escala': return 'Diga um número de 0 a 10.';
+    case 'numero': return 'Diga o número.';
+    case 'opcao': return `Opções: ${parte.opcoes.map(rotulo).join(', ')}.`;
+    case 'multiplas': return `Opções: ${parte.opcoes.map(rotulo).join(', ')} (ou "nenhuma").`;
+    case 'numero_unidade': return 'Diga o número e a unidade, por exemplo "2 horas".';
+    default: return 'Dite o texto. Você pode corrigir antes de confirmar.';
+  }
+}
+
+function textoDoValor(v) {
+  if (v === true) return 'Sim';
+  if (v === false) return 'Não';
+  if (Array.isArray(v)) return v.length ? v.map(rotulo).join(', ') : 'Nenhuma';
+  if (v && typeof v === 'object') return `${v.valor} ${rotulo(v.unidade)}`;
+  if (typeof v === 'string') return rotulo(v);
+  return String(v);
+}
+
+function aplicarValor(id, nomeParte, v) {
+  const c = estado.perguntas[id];
+  if (c.simples || v === 'nao_se_aplica') c.set(v); // marcador vale para a pergunta inteira
+  else c.partes[nomeParte].set(v);
+}
+
+async function alternarGravacao() {
+  if (voz.gravador && voz.gravador.state === 'recording') { voz.gravador.stop(); return; }
+  let fluxo;
+  try {
+    fluxo = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch (e) {
+    voz.resultado = { erro: `Não foi possível usar o microfone (${e.message}). Autorize o microfone no navegador.` };
+    renderVoz();
+    return;
+  }
+  const passo = voz.passo;
+  const rec = new MediaRecorder(fluxo);
+  voz.pedacos = [];
+  rec.ondataavailable = (ev) => { if (ev.data.size) voz.pedacos.push(ev.data); };
+  rec.onstop = () => {
+    fluxo.getTracks().forEach((t) => t.stop());
+    clearTimeout(voz.limite);
+    const blob = new Blob(voz.pedacos, { type: rec.mimeType || 'audio/webm' });
+    voz.pedacos = [];
+    enviarAudio(passo, blob);
+  };
+  voz.gravador = rec;
+  voz.resultado = null;
+  rec.start();
+  const parte = estado.perguntas[passo.id].partes[passo.parte].parte;
+  voz.limite = setTimeout(() => { if (rec.state === 'recording') rec.stop(); }, parte.forma === 'texto' ? 90000 : 20000);
+  renderVoz();
+}
+
+async function enviarAudio(passo, blob) {
+  voz.ocupado = true;
+  renderVoz();
+  try {
+    const r = await fetch(`/api/voz?pergunta=${encodeURIComponent(passo.id)}&parte=${encodeURIComponent(passo.parte)}`,
+      { method: 'POST', headers: { 'Content-Type': blob.type || 'audio/webm' }, body: blob });
+    const corpo = await r.json();
+    voz.resultado = r.status === 200 ? { ...corpo, passo } : { erro: (corpo.erros || ['erro desconhecido']).join('; ') };
+  } catch (e) {
+    voz.resultado = { erro: `Não foi possível falar com o servidor local (${e.message}).` };
+  } finally {
+    voz.ocupado = false;
+    renderVoz();
+  }
+}
+
+async function confirmarVoz(valor) {
+  const { passo } = voz.resultado;
+  aplicarValor(passo.id, passo.parte, valor);
+  voz.resultado = null;
+  await calcular(); // recalcula na hora: alerta de sinal grave aparece já
+  renderVoz();
+}
+
+function renderVoz() {
+  const caixa = $('#voz');
+  if (!caixa || !estado.dados) return;
+  const titulo = h('h2', { id: 'titulo-voz', texto: 'Entrevista por voz' });
+  if (!estado.dados.voz) {
+    caixa.replaceChildren(titulo, h('p', { class: 'dica', texto: 'Voz desligada neste computador. Para ligar: pip install -r requirements-voz.txt e reinicie a interface.' }));
+    return;
+  }
+  if (estado.campos.idade.get() === undefined) {
+    caixa.replaceChildren(titulo, h('p', { class: 'dica', texto: 'Preencha a idade e as aferições no cadastro abaixo para começar. Depois, a entrevista segue por voz: segurança, relato e perguntas complementares.' }));
+    return;
+  }
+  const filhos = [titulo];
+  const graves = (estado.saida ? estado.saida.alertas : []).filter((a) => a.codigo === 'sinal_de_alerta');
+  if (graves.length) {
+    filhos.push(h('div', { class: 'alerta grave', role: 'alert' }, h('span', { class: 'cod', texto: 'Sinal de alerta' }),
+      graves.map((a) => h('span', { texto: a.mensagem }))));
+  }
+  const passo = proximoPasso();
+  const chave = passo ? `${passo.id}.${passo.parte}` : null;
+  if (chave !== voz.chave) { voz.chave = chave; if (voz.resultado && voz.resultado.erro) voz.resultado = null; }
+  voz.passo = passo;
+  if (!passo) {
+    filhos.push(h('p', { texto: 'Entrevista por voz concluída. Revise a ficha e clique em "Colocar na fila".' }));
+    if (voz.pulados.size) filhos.push(h('button', { type: 'button', class: 'pilula secundaria', texto: `Voltar às ${voz.pulados.size} pulada(s)`, onclick() { voz.pulados.clear(); renderVoz(); } }));
+    caixa.replaceChildren(...filhos);
+    return;
+  }
+  const p = estado.dados.perguntas.find((x) => x.id === passo.id);
+  const parte = p.partes.find((x) => x.nome === passo.parte);
+  const gravando = voz.gravador && voz.gravador.state === 'recording';
+  filhos.push(
+    h('p', { class: 'rotulo-secao', texto: `Etapa ${passo.fase + 1} de 3 · ${FASES[passo.fase]}` }),
+    h('div', { class: 'voz-pergunta' }, h('span', { class: 'id', texto: p.id }),
+      h('div', {}, h('p', { class: 'texto', texto: p.texto }),
+        p.partes.length > 1 ? h('p', { class: 'parte-voz', texto: `Agora: ${PARTES[parte.nome] ?? humanizar(parte.nome)}` }) : null,
+        h('p', { class: 'dica', texto: dicaDaParte(parte) }))),
+    h('div', { class: 'controles' },
+      h('button', { type: 'button', class: 'pilula gravar', 'aria-pressed': String(gravando), disabled: voz.ocupado,
+        texto: gravando ? '■ Parar e transcrever' : '● Gravar resposta', onclick: alternarGravacao }),
+      h('button', { type: 'button', class: 'pilula secundaria', texto: 'Pular', disabled: gravando || voz.ocupado,
+        onclick() { voz.pulados.add(chave); voz.resultado = null; renderVoz(); } }),
+      h('button', { type: 'button', class: 'pilula secundaria', texto: 'Responder na ficha', onclick: () => irParaPergunta(p.id) })));
+  if (gravando) filhos.push(h('p', { class: 'gravando', texto: 'Gravando… fale a resposta e clique em "Parar".' }));
+  if (voz.ocupado) filhos.push(h('p', { class: 'dica', texto: 'Transcrevendo nesta máquina…' }));
+  const r = voz.resultado;
+  if (r && r.erro) filhos.push(h('p', { class: 'alerta atencao', texto: r.erro }));
+  else if (r && r.passo && `${r.passo.id}.${r.passo.parte}` === chave) {
+    const ouvi = h('p', {}, h('strong', { texto: 'Ouvi: ' }), `“${r.transcricao || '(nada)'}”`);
+    if (r.entendido && parte.forma === 'texto') {
+      const area = h('textarea', { rows: '4', maxlength: String(parte.max_caracteres ?? 1000), 'aria-label': 'Texto transcrito' });
+      area.value = r.valor;
+      filhos.push(h('div', { class: 'voz-resultado' }, ouvi, area,
+        h('div', { class: 'controles' }, h('button', { type: 'button', class: 'pilula', texto: 'Confirmar', onclick: () => confirmarVoz(area.value.trim()) }),
+          h('button', { type: 'button', class: 'pilula secundaria', texto: 'Gravar de novo', onclick: alternarGravacao }))));
+    } else if (r.entendido) {
+      filhos.push(h('div', { class: 'voz-resultado' }, ouvi, h('p', { class: 'entendi' }, h('strong', { texto: 'Entendi: ' }), textoDoValor(r.valor)),
+        h('div', { class: 'controles' }, h('button', { type: 'button', class: 'pilula', texto: 'Confirmar', onclick: () => confirmarVoz(r.valor) }),
+          h('button', { type: 'button', class: 'pilula secundaria', texto: 'Gravar de novo', onclick: alternarGravacao }))));
+    } else {
+      filhos.push(h('div', { class: 'voz-resultado' }, ouvi,
+        h('p', { class: 'alerta atencao', texto: `Não entendi (${r.motivo}). Grave de novo ou responda na ficha.` })));
+    }
+  }
+  caixa.replaceChildren(...filhos);
+}
+
+/* ---------------------------------------------------------------- fila e QR */
+
+const CORES = { vermelho: 'Vermelho', laranja: 'Laranja', amarelo: 'Amarelo', verde: 'Verde', azul: 'Azul' };
+const numeroFila = (n) => String(n).padStart(3, '0');
+
+async function postar(url, corpo) {
+  const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo) });
+  return { status: r.status, corpo: await r.json() };
+}
+
+async function colocarNaFila(ev) {
+  const botao = ev.target;
+  botao.disabled = true;
+  try {
+    // o servidor processa a ficha de novo: a cor nunca sai do navegador
+    const { status, corpo } = await postar('/api/fila', { ficha: lerFicha(), extrator: $('#extrator').value });
+    if (status !== 200) { mostrarErros(corpo.erros || ['erro desconhecido']); return; }
+    mostrarQR(corpo, true);
+    carregarFila();
+  } catch (e) {
+    mostrarErros([`Não foi possível falar com o servidor local (${e.message}).`]);
+  } finally {
+    botao.disabled = false;
+  }
+}
+
+function mostrarQR(r, nova) {
+  $('#titulo-qr').textContent = nova ? 'Paciente na fila' : 'QR do paciente';
+  $('#qr-numero').textContent = numeroFila(r.numero);
+  const img = $('#qr-imagem');
+  img.hidden = !r.qr;
+  if (r.qr) img.src = r.qr; else img.removeAttribute('src');
+  $('#qr-texto').textContent = r.url
+    ? 'O paciente aponta a câmera do celular (no Wi-Fi da unidade) para ver a cor, o motivo e a faixa da fila.'
+    : 'A página do paciente está desligada (--sem-paciente); informe só o número de atendimento.';
+  $('#qr-url').textContent = r.url || '';
+  $('#qr-nova').hidden = !nova;
+  $('#janela-qr').showModal();
+}
+
+function mostrarTela(qual) {
+  const fila = qual === 'fila';
+  $('#tela-triagem').hidden = fila;
+  $('#tela-fila').hidden = !fila;
+  $('#aba-triagem').setAttribute('aria-pressed', String(!fila));
+  $('#aba-fila').setAttribute('aria-pressed', String(fila));
+  if (fila) carregarFila();
+}
+
+async function acaoFila(rota, numero) {
+  try {
+    const { status, corpo } = await postar(rota, { numero });
+    if (rota === '/api/fila/qr' && status === 200) mostrarQR(corpo, false);
+  } finally {
+    carregarFila();
+  }
+}
+
+function linhaFila(p) {
+  const acoes = [];
+  if (p.estado === 'aguardando') acoes.push(h('button', { type: 'button', class: 'pilula', texto: 'Chamar', onclick: () => acaoFila('/api/fila/chamar', p.numero) }));
+  acoes.push(h('button', { type: 'button', class: 'pilula secundaria', texto: 'Atendido', onclick: () => acaoFila('/api/fila/concluir', p.numero) }));
+  acoes.push(h('button', { type: 'button', class: 'pilula secundaria', texto: 'Ver QR', onclick: () => acaoFila('/api/fila/qr', p.numero) }));
+  return h('tr', { class: p.estado === 'chamado' ? 'chamado' : '' },
+    h('td', { class: 'num', texto: p.posicao ? `${p.posicao}º` : 'chamado' }),
+    h('td', { class: 'num', texto: numeroFila(p.numero) }),
+    h('td', {}, h('span', { class: `cor-chip cor-${p.cor}`, texto: CORES[p.cor] ?? p.cor })),
+    h('td', { class: 'num', texto: String(p.pontuacao) }),
+    h('td', { class: 'col-motivos' }, h('ul', { class: 'motivos-fila' }, p.motivos.map((m) => h('li', { texto: m })))),
+    h('td', { texto: `${p.espera_min} min` }),
+    h('td', { class: 'col-acoes' }, h('div', { class: 'acoes' }, acoes)));
+}
+
+async function carregarFila() {
+  let dados;
+  try {
+    dados = await (await fetch('/api/fila')).json();
+  } catch (e) {
+    $('#lista-fila').replaceChildren(h('p', { class: 'dica', texto: `Não foi possível carregar a fila (${e.message}).` }));
+    return;
+  }
+  const aguardando = dados.pacientes.filter((p) => p.estado === 'aguardando').length;
+  $('#contador-fila').textContent = String(aguardando);
+  $('#aviso-paciente').textContent = dados.pagina_paciente
+    ? 'Página do paciente ligada: cada paciente recebe um QR para acompanhar a fila pelo celular, no Wi-Fi da unidade.'
+    : 'Página do paciente desligada: a fila funciona, mas sem QR.';
+  $('#lista-fila').replaceChildren(dados.pacientes.length
+    ? h('table', { class: 'tabela-fila' },
+      h('thead', {}, h('tr', {}, ['Posição', 'Número', 'Cor', 'Pontuação', 'Motivo', 'Espera', 'Ações'].map((t) => h('th', { texto: t })))),
+      h('tbody', {}, dados.pacientes.map(linhaFila)))
+    : h('p', { class: 'dica', texto: 'Ninguém na fila. Depois da triagem, clique em "Colocar na fila".' }));
 }
 
 /* ---------------------------------------------------------------- início */
@@ -503,16 +786,29 @@ async function iniciar() {
   construirCadastro();
   construirPerguntas(q);
   textoExtrator();
+  renderVoz();
 
   $('#exemplo').addEventListener('change', (ev) => {
     if (ev.target.value === '') return;
     preencher(estado.exemplos[Number(ev.target.value)].ficha);
     calcular();
   });
-  $('#limpar').addEventListener('click', () => { preencher({}); $('#exemplo').value = ''; $('#painel').dataset.desatualizado = ''; calcular(); });
+  $('#limpar').addEventListener('click', () => { voz.pulados.clear(); voz.resultado = null; preencher({}); $('#exemplo').value = ''; $('#painel').dataset.desatualizado = ''; calcular(); });
   $('#analisar').addEventListener('click', () => { clearTimeout(estado.timer); calcular(); });
   $('#extrator').addEventListener('change', () => { textoExtrator(); agendar(); });
   $('#auto').addEventListener('change', agendar);
+
+  $('#aba-triagem').addEventListener('click', () => mostrarTela('triagem'));
+  $('#aba-fila').addEventListener('click', () => mostrarTela('fila'));
+  $('#qr-fechar').addEventListener('click', () => $('#janela-qr').close());
+  $('#qr-nova').addEventListener('click', () => {
+    $('#janela-qr').close();
+    voz.pulados.clear(); voz.resultado = null;
+    preencher({}); $('#exemplo').value = ''; $('#painel').dataset.desatualizado = ''; calcular();
+    window.scrollTo({ top: 0 });
+  });
+  carregarFila();
+  setInterval(() => { if (!document.hidden) carregarFila(); }, 5000);
 }
 
 iniciar();

@@ -1,0 +1,58 @@
+/* Página do paciente (celular). Sem JavaScript; a página se recarrega sozinha. */
+:root {
+  --fundo: #f4f7f6; --papel: #ffffff; --tinta: #12211e; --tinta-suave: #4b5d59; --linha: #d9e3e0;
+  --marca: #0b6b5f;
+  --azul: #2563eb;      --azul-fundo: #e6eefc;
+  --verde: #15803d;     --verde-fundo: #e2f4e8;
+  --amarelo: #a16207;   --amarelo-fundo: #fdf3c8;
+  --laranja: #c2410c;   --laranja-fundo: #ffe8d6;
+  --vermelho: #b91c1c;  --vermelho-fundo: #fde2e2;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --fundo: #0e1715; --papel: #16231f; --tinta: #e8f1ee; --tinta-suave: #a2b5b0; --linha: #2a3b36;
+    --marca: #3dbba9;
+    --azul: #7aa5ff; --azul-fundo: #17274a;
+    --verde: #62d58a; --verde-fundo: #12331f;
+    --amarelo: #f1cd5a; --amarelo-fundo: #3a3110;
+    --laranja: #ffa469; --laranja-fundo: #43230f;
+    --vermelho: #ff8a8a; --vermelho-fundo: #4a1818;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--fundo); color: var(--tinta);
+  font: 17px/1.5 "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+}
+main { max-width: 520px; margin: 0 auto; padding: 20px 16px 32px; display: flex; flex-direction: column; gap: 14px; }
+h2 { margin: 0 0 6px; font-size: 1.15rem; }
+p { margin: 0; }
+header { text-align: center; }
+.marca { font-weight: 800; font-size: 1.1rem; color: var(--marca); }
+.marca span { color: var(--tinta); }
+.numero-rotulo { margin-top: 10px; color: var(--tinta-suave); font-weight: 600; }
+.numero { font-size: 4.2rem; font-weight: 800; line-height: 1; letter-spacing: .04em; }
+.cartao, .posicao, .chamado {
+  background: var(--papel); border: 1px solid var(--linha); border-radius: 16px; padding: 16px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.rotulo { font-size: .85rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; opacity: .85; }
+.nome-cor { font-size: 1.5rem; font-weight: 800; }
+.motivos { margin: 0; padding-left: 20px; }
+.cor-azul { background: var(--azul-fundo); color: var(--azul); }
+.cor-verde { background: var(--verde-fundo); color: var(--verde); }
+.cor-amarelo { background: var(--amarelo-fundo); color: var(--amarelo); }
+.cor-laranja { background: var(--laranja-fundo); color: var(--laranja); }
+.cor-vermelho { background: var(--vermelho-fundo); color: var(--vermelho); }
+.cartao.cor { border: none; }
+.faixa { font-size: 1.35rem; font-weight: 800; }
+.aviso { color: var(--tinta-suave); font-size: .95rem; }
+.chamado { border: 2px solid var(--marca); text-align: center; }
+.ordem { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.ordem li { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 10px; }
+.ordem li.sua { outline: 2px solid currentColor; font-weight: 800; }
+.ordem .bolinha { width: 12px; height: 12px; border-radius: 50%; background: currentColor; flex: none; }
+.ordem .nome { flex: 1; min-width: 0; }
+.ordem .tempo { font-size: .9rem; white-space: nowrap; }
+.rodape { text-align: center; color: var(--tinta-suave); font-size: .85rem; }

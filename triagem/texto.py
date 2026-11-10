@@ -3,7 +3,7 @@
 import re
 import unicodedata
 
-MAX_RELATO = 200
+MAX_RELATO = 1000  # cerca de 1 minuto de fala; o relato pode ser ditado
 MAX_ITENS = 10
 MAX_ITEM_CHARS = 40
 

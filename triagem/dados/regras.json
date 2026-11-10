@@ -37,6 +37,13 @@
     "frequencia_respiratoria": "quando houver falta de ar (Q09)"
   },
 
+  "fila": {
+    "nota": "Tempos-alvo de referência do Protocolo de Manchester, em minutos, mostrados ao paciente. NÃO validados pela equipe clínica.",
+    "tempos_alvo_minutos": {"vermelho": 0, "laranja": 10, "amarelo": 60, "verde": 120, "azul": 240},
+    "explicacao_sem_regra": "Nenhum sinal de urgência foi identificado na triagem.",
+    "explicacao_promocao": "A soma dos sinais informados aumentou a prioridade."
+  },
+
   "pontuacao": {
     "teto": 100,
     "cor_base": "verde",
@@ -86,23 +93,23 @@
       "glasgow_reduzido": 15
     },
     "regras_cor": [
-      {"id": "RC-01", "descricao": "Alteração de consciência", "todos": ["alteracao_consciencia"], "cor_minima": "laranja"},
-      {"id": "RC-02", "descricao": "Glasgow reduzido", "todos": ["glasgow_reduzido"], "cor_minima": "laranja"},
-      {"id": "RC-03", "descricao": "Glasgow muito baixo", "todos": [{"sinal": "glasgow_reduzido", "valor_max": 8}], "cor_minima": "vermelho"},
-      {"id": "RC-04", "descricao": "Alteração de consciência com hipoxemia", "todos": ["alteracao_consciencia", "hipoxemia"], "cor_minima": "vermelho"},
-      {"id": "RC-05", "descricao": "Hipoxemia", "todos": ["hipoxemia"], "cor_minima": "laranja"},
-      {"id": "RC-06", "descricao": "Hipotensão", "todos": ["hipotensao"], "cor_minima": "laranja"},
-      {"id": "RC-07", "descricao": "Falta de ar com fala entrecortada", "todos": ["dispneia", "fala_entrecortada"], "cor_minima": "laranja"},
-      {"id": "RC-08", "descricao": "Dor em aperto com suor frio, enjoo ou tontura", "todos": ["dor_em_aperto", "suor_frio_enjoo_tontura"], "cor_minima": "laranja"},
-      {"id": "RC-09", "descricao": "Dor em aperto com irradiação", "todos": ["dor_em_aperto", "irradiacao"], "cor_minima": "laranja"},
-      {"id": "RC-10", "descricao": "Sangue no vômito ou nas fezes", "todos": ["sangue_vomito_fezes"], "cor_minima": "laranja"},
-      {"id": "RC-11", "descricao": "Tosse com sangue", "todos": ["tosse_com_sangue"], "cor_minima": "laranja"},
-      {"id": "RC-12", "descricao": "Dor abdominal com abdome rígido ou distendido", "todos": ["dor_abdominal", "abdome_rigido_distendido"], "cor_minima": "laranja"},
-      {"id": "RC-13", "descricao": "Gravidez possível com dor abdominal", "todos": ["gravidez_possivel", "dor_abdominal"], "cor_minima": "laranja"},
-      {"id": "RC-14", "descricao": "Piora progressiva relatada", "todos": ["piora_progressiva"], "cor_minima": "amarelo"},
-      {"id": "RC-15", "descricao": "Falta de ar", "todos": ["dispneia"], "cor_minima": "amarelo"},
-      {"id": "RC-16", "descricao": "Dor de nota alta (nota baixa nunca reduz)", "todos": [{"sinal": "dor", "valor_min": 8}], "cor_minima": "amarelo"},
-      {"id": "RC-17", "descricao": "Febre referida com antitérmico recente (febre possivelmente mascarada)", "todos": ["febre_referida", "antitermico_recente"], "cor_minima": "amarelo"}
+      {"id": "RC-01", "descricao": "Alteração de consciência", "todos": ["alteracao_consciencia"], "cor_minima": "laranja", "explicacao_paciente": "Alteração no nível de consciência"},
+      {"id": "RC-02", "descricao": "Glasgow reduzido", "todos": ["glasgow_reduzido"], "cor_minima": "laranja", "explicacao_paciente": "Alteração na avaliação neurológica"},
+      {"id": "RC-03", "descricao": "Glasgow muito baixo", "todos": [{"sinal": "glasgow_reduzido", "valor_max": 8}], "cor_minima": "vermelho", "explicacao_paciente": "Alteração importante na avaliação neurológica"},
+      {"id": "RC-04", "descricao": "Alteração de consciência com hipoxemia", "todos": ["alteracao_consciencia", "hipoxemia"], "cor_minima": "vermelho", "explicacao_paciente": "Alteração de consciência com oxigenação baixa"},
+      {"id": "RC-05", "descricao": "Hipoxemia", "todos": ["hipoxemia"], "cor_minima": "laranja", "explicacao_paciente": "Oxigenação do sangue abaixo do esperado"},
+      {"id": "RC-06", "descricao": "Hipotensão", "todos": ["hipotensao"], "cor_minima": "laranja", "explicacao_paciente": "Pressão arterial baixa"},
+      {"id": "RC-07", "descricao": "Falta de ar com fala entrecortada", "todos": ["dispneia", "fala_entrecortada"], "cor_minima": "laranja", "explicacao_paciente": "Falta de ar que atrapalha a fala"},
+      {"id": "RC-08", "descricao": "Dor em aperto com suor frio, enjoo ou tontura", "todos": ["dor_em_aperto", "suor_frio_enjoo_tontura"], "cor_minima": "laranja", "explicacao_paciente": "Dor em aperto com suor frio, enjoo ou tontura"},
+      {"id": "RC-09", "descricao": "Dor em aperto com irradiação", "todos": ["dor_em_aperto", "irradiacao"], "cor_minima": "laranja", "explicacao_paciente": "Dor em aperto que se espalha para outra parte do corpo"},
+      {"id": "RC-10", "descricao": "Sangue no vômito ou nas fezes", "todos": ["sangue_vomito_fezes"], "cor_minima": "laranja", "explicacao_paciente": "Sangue no vômito ou nas fezes"},
+      {"id": "RC-11", "descricao": "Tosse com sangue", "todos": ["tosse_com_sangue"], "cor_minima": "laranja", "explicacao_paciente": "Tosse com sangue"},
+      {"id": "RC-12", "descricao": "Dor abdominal com abdome rígido ou distendido", "todos": ["dor_abdominal", "abdome_rigido_distendido"], "cor_minima": "laranja", "explicacao_paciente": "Dor na barriga com a barriga dura ou inchada"},
+      {"id": "RC-13", "descricao": "Gravidez possível com dor abdominal", "todos": ["gravidez_possivel", "dor_abdominal"], "cor_minima": "laranja", "explicacao_paciente": "Dor na barriga com possibilidade de gravidez"},
+      {"id": "RC-14", "descricao": "Piora progressiva relatada", "todos": ["piora_progressiva"], "cor_minima": "amarelo", "explicacao_paciente": "Sintomas piorando com o tempo"},
+      {"id": "RC-15", "descricao": "Falta de ar", "todos": ["dispneia"], "cor_minima": "amarelo", "explicacao_paciente": "Falta de ar"},
+      {"id": "RC-16", "descricao": "Dor de nota alta (nota baixa nunca reduz)", "todos": [{"sinal": "dor", "valor_min": 8}], "cor_minima": "amarelo", "explicacao_paciente": "Dor forte"},
+      {"id": "RC-17", "descricao": "Febre referida com antitérmico recente (febre possivelmente mascarada)", "todos": ["febre_referida", "antitermico_recente"], "cor_minima": "amarelo", "explicacao_paciente": "Febre que pode estar disfarçada pelo remédio tomado"}
     ]
   }
 }

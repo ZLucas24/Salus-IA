@@ -25,13 +25,42 @@
         <p>Copiloto de triagem para UPAs e prontos-socorros do SUS</p>
       </div>
     </div>
+    <nav class="abas" aria-label="Telas">
+      <button type="button" class="aba" id="aba-triagem" aria-pressed="true">Triagem</button>
+      <button type="button" class="aba" id="aba-fila" aria-pressed="false">Fila <span class="contador" id="contador-fila">0</span></button>
+    </nav>
     <div class="selos">
       <span class="selo" id="selo-regras">regras não validadas</span>
       <span class="selo neutro" id="selo-versao"></span>
     </div>
   </header>
 
-  <main class="layout">
+  <section class="tela-fila" id="tela-fila" aria-labelledby="titulo-fila" hidden>
+    <div class="cartao">
+      <div class="controles entre">
+        <h2 id="titulo-fila">Fila de atendimento</h2>
+        <p class="dica">Ordem: cor, depois pontuação, depois chegada. Atualiza sozinha.</p>
+      </div>
+      <p class="dica" id="aviso-paciente"></p>
+      <div id="lista-fila" aria-live="polite"></div>
+    </div>
+  </section>
+
+  <dialog id="janela-qr" aria-labelledby="titulo-qr">
+    <div class="qr-conteudo">
+      <h2 id="titulo-qr">Paciente na fila</h2>
+      <p class="numero-grande" id="qr-numero"></p>
+      <img id="qr-imagem" alt="QR code com o status do paciente" width="240" height="240" hidden>
+      <p class="dica" id="qr-texto"></p>
+      <p class="qr-url" id="qr-url"></p>
+      <div class="controles centro">
+        <button type="button" class="pilula secundaria" id="qr-fechar">Fechar</button>
+        <button type="button" class="pilula" id="qr-nova">Nova triagem</button>
+      </div>
+    </div>
+  </dialog>
+
+  <main class="layout" id="tela-triagem">
     <section class="coluna" aria-labelledby="titulo-entrevista">
       <div class="cartao barra">
         <h2 id="titulo-entrevista">Entrevista</h2>
@@ -51,6 +80,7 @@
         <p class="dica" id="dica-extrator"></p>
       </div>
 
+      <section class="cartao voz" id="voz" aria-labelledby="titulo-voz" aria-live="polite"></section>
       <div id="cadastro"></div>
       <div id="perguntas"></div>
     </section>

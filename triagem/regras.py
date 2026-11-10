@@ -49,4 +49,12 @@ def carregar_regras() -> dict:
             raise RegrasInvalidas(f"{r['id']}: cor_minima inválida")
         for cond in r["todos"]:
             _validar_condicao(r["id"], cond)
+        if not isinstance(r.get("explicacao_paciente"), str) or not r["explicacao_paciente"].strip():
+            raise RegrasInvalidas(f"{r['id']}: falta explicacao_paciente (texto mostrado ao paciente)")
+    fila = regras["fila"]
+    tempos = fila["tempos_alvo_minutos"]
+    if set(tempos) != {c.value for c in Cor}:
+        raise RegrasInvalidas("fila.tempos_alvo_minutos deve ter exatamente uma entrada por cor")
+    if any(not isinstance(t, int) or t < 0 for t in tempos.values()):
+        raise RegrasInvalidas("fila.tempos_alvo_minutos: use minutos inteiros >= 0")
     return regras

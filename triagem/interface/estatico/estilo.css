@@ -176,6 +176,48 @@ pre { margin: 0; background: var(--fundo); border: 1px solid var(--linha); borde
 .regras { margin: 0; padding-left: 20px; display: grid; gap: 3px; font-size: .875rem; }
 .rodape { text-align: center; color: var(--tinta-suave); font-size: .8125rem; padding: 18px 16px 28px; }
 
+/* entrevista por voz */
+.voz { border: 2px solid var(--marca); }
+.voz-pergunta { display: flex; gap: 10px; align-items: flex-start; }
+.voz-pergunta .texto { font-weight: 800; font-size: 1.1rem; }
+.parte-voz { font-weight: 700; color: var(--marca); }
+.pilula.gravar[aria-pressed="true"] { background: var(--vermelho); }
+.gravando { color: var(--vermelho); font-weight: 700; }
+.voz-resultado { display: grid; gap: 8px; background: var(--fundo); border-radius: 14px; padding: 12px; }
+.voz-resultado textarea { width: 100%; background: var(--papel); border: 1.5px solid var(--linha); border-radius: 12px; padding: 8px 12px; font: inherit; color: inherit; resize: vertical; }
+.entendi { font-size: 1.1rem; }
+
+/* abas, fila e QR */
+.abas { display: flex; gap: 6px; background: var(--fundo); border-radius: 999px; padding: 4px; }
+.aba { border: 0; background: none; border-radius: 999px; padding: 7px 18px; font-weight: 800; cursor: pointer; color: var(--tinta-suave); display: flex; gap: 8px; align-items: center; }
+.aba[aria-pressed="true"] { background: var(--papel); color: var(--marca); box-shadow: var(--sombra); }
+.contador { background: var(--marca); color: #fff; border-radius: 999px; padding: 0 8px; font-size: .75rem; min-width: 22px; text-align: center; }
+.tela-fila { padding: 20px 16px 8px; max-width: 1280px; margin: 0 auto; }
+.tela-fila[hidden], .layout[hidden] { display: none; }
+.controles.entre { justify-content: space-between; }
+.controles.centro { justify-content: center; }
+.tabela-fila { width: 100%; border-collapse: collapse; font-size: .9375rem; }
+.tabela-fila th { text-align: left; font-size: .75rem; text-transform: uppercase; letter-spacing: .06em; color: var(--tinta-suave); padding: 6px 8px; border-bottom: 1.5px solid var(--linha); }
+.tabela-fila td { padding: 10px 8px; border-bottom: 1px solid var(--linha); vertical-align: top; }
+.tabela-fila .num { font-weight: 800; font-variant-numeric: tabular-nums; }
+.tabela-fila tr.chamado td { background: var(--marca-clara); }
+.tabela-fila .acoes { display: flex; gap: 6px; flex-wrap: wrap; }
+.tabela-fila .acoes .pilula { min-height: 32px; padding: 5px 14px; font-size: .8125rem; }
+.cor-chip { border-radius: 999px; padding: 2px 12px; font-weight: 800; font-size: .8125rem; text-transform: uppercase; white-space: nowrap; }
+.motivos-fila { margin: 0; padding-left: 18px; font-size: .875rem; }
+@media (max-width: 760px) {
+  .tabela-fila thead { display: none; }
+  .tabela-fila tr { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; padding: 10px 0; border-bottom: 1px solid var(--linha); }
+  .tabela-fila td { border: 0; padding: 2px 4px; }
+  .tabela-fila td.col-motivos, .tabela-fila td.col-acoes { grid-column: 1 / -1; }
+}
+dialog { border: 0; border-radius: var(--raio); padding: 0; background: var(--papel); color: var(--tinta); box-shadow: 0 20px 60px rgba(0, 0, 0, .3); max-width: min(420px, calc(100vw - 32px)); }
+dialog::backdrop { background: rgba(10, 20, 18, .55); }
+.qr-conteudo { padding: 24px; display: grid; gap: 12px; text-align: center; justify-items: center; }
+.numero-grande { font-size: 3.4rem; font-weight: 800; line-height: 1; letter-spacing: .04em; }
+#qr-imagem { background: #fff; border-radius: 12px; image-rendering: pixelated; }
+.qr-url { font-size: .75rem; color: var(--tinta-suave); word-break: break-all; }
+
 /* barra fixa com o resultado, só em tela estreita */
 .mini { display: none; }
 @media (max-width: 980px) {

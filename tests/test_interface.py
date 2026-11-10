@@ -161,5 +161,6 @@ def test_erro_interno_nao_vaza_detalhes(srv, monkeypatch):
     assert status == 500 and "segredo" not in json.dumps(corpo)
 
 
-def test_comando_recusa_porta_ocupada(srv):
-    assert servidor.main(["--porta", str(srv.server_address[1])]) == 2
+def test_comando_recusa_porta_ocupada(srv, tmp_path):
+    assert servidor.main(["--porta", str(srv.server_address[1]), "--sem-paciente",
+                          "--fila", str(tmp_path / "fila.db")]) == 2

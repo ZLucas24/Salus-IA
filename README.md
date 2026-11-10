@@ -60,7 +60,7 @@ Estas regras valem para todo o código (a lista completa está no [CLAUDE.md](CL
 5. **Resposta direta vale mais que o relato.** Se os dois divergem, o sistema mostra a resposta
    direta, mas conta o sinal citado no relato e emite um alerta.
 6. **Funciona sem internet.** O extrator padrão (`mock`) não usa rede; o modelo real roda local,
-   via Ollama.
+   via Ollama, e a voz também é transcrita na própria máquina.
 
 ## Início rápido
 
@@ -136,6 +136,7 @@ Para trocar o modelo ou o endereço do Ollama, copie `.env.example` para `.env` 
 | Variável | Para que serve | Padrão |
 |---|---|---|
 | `TRIAGEM_MODELO` | modelo usado pelo extrator Ollama | `llama3.1:8b` |
+| `TRIAGEM_WHISPER` | modelo de voz (faster-whisper): `base`, `small`, `medium` | `small` |
 | `OLLAMA_HOST` | endereço do Ollama | `http://127.0.0.1:11434` |
 | `SUPABASE_URL`, `SUPABASE_KEY`, `HF_TOKEN` | reservados; **hoje não são usados** | vazio |
 
@@ -298,7 +299,7 @@ A ficha é um JSON com duas partes, `dados_atendente` e `respostas`:
 | Formato | Exemplo |
 |---|---|
 | sim/não | `"Q09": true` |
-| texto livre (Q01: até 200 caracteres) | `"Q01": "dor na barriga desde ontem"` |
+| texto livre (Q01: até 1000 caracteres) | `"Q01": "dor na barriga desde ontem"` |
 | nota de 0 a 10 | `"Q05": 7` |
 | uma opção | `"Q03": "piorando"` |
 | lista de opções | `"Q13": ["diabetes", "hipertensao"]` (`[]` = nenhuma) |
@@ -325,12 +326,12 @@ Em [exemplos/](exemplos/) há 16 fichas, cada uma mostrando um caso:
 | `ficha_04_alergia_na_q10.json` | alergia registrada na Q10 |
 | `ficha_05_alergia_so_no_relato.json` | alergia que só aparece no relato |
 | `ficha_06_divergencia_relato_x_direta.json` | relato e resposta direta discordam |
-| `ficha_07_relato_com_200_caracteres.json` | relato no limite de 200 caracteres |
+| `ficha_07_relato_no_limite.json` | relato com exatamente 1000 caracteres (o máximo) |
 | `ficha_11_nao_sabe_e_recusou.json` | marcadores `nao_sabe` e `recusou` |
 | `ficha_12_gravidez_aplica_ou_nao.json` | quando a Q15 se aplica |
 | `ficha_13_febre_mascarada.json` | febre referida + antitérmico + temperatura normal |
 | `ficha_15_crianca_afericoes.json` | criança (limites pediátricos ainda não existem) |
-| `ficha_08_relato_201_falha.json` | **falha de propósito:** relato com 201 caracteres |
+| `ficha_08_relato_acima_do_limite_falha.json` | **falha de propósito:** relato com 1001 caracteres |
 | `ficha_09_sem_idade_falha.json` | **falha de propósito:** sem idade |
 | `ficha_10_tipo_resposta_errado_falha.json` | **falha de propósito:** tipo errado |
 | `ficha_14_dado_contraditorio_falha.json` | **falha de propósito:** dado contraditório |
@@ -522,7 +523,67 @@ Opções do `python -m triagem`:
 python -m triagem.interface --abrir     # abre http://127.0.0.1:8765/
 ```
 
-Opções: `--porta 9000` para outra porta; sem `--abrir`, só sobe o servidor. Encerre com `Ctrl+C`.
+Sobem dois servidores:
+
+| Servidor | Endereço | Quem acessa |
+|---|---|---|
+| Tela do enfermeiro | `http://127.0.0.1:8765/` | só a própria máquina |
+| Página do paciente | `http://<IP da máquina no Wi-Fi>:8766/p/<código>` | o celular do paciente, pelo QR |
+
+| Opção | Para que serve |
+|---|---|
+| `--abrir` | abre o navegador |
+| `--porta 9000` | outra porta para a tela do enfermeiro |
+| `--porta-paciente 9001` | outra porta para a página do paciente |
+| `--ip 192.168.0.10` | IP usado no QR, se o detectado automaticamente estiver errado |
+| `--fila caminho.db` | onde a fila é salva (padrão: `fila.db`, fora do Git) |
+| `--sem-paciente` | não abre a página do paciente na rede; a fila funciona sem QR |
+| `--sem-voz` | desliga a entrevista por voz |
+
+Encerre com `Ctrl+C`. Na primeira vez, o Windows pode perguntar se o Python pode usar a rede:
+permita em **rede privada**, senão o celular não alcança a página do paciente.
+
+### Entrevista por voz
+
+Quem fala é o **enfermeiro**: ele faz a pergunta ao paciente e dita a resposta. Para ligar:
+
+```bash
+pip install -r requirements-voz.txt
+```
+
+Na primeira vez que a interface sobe, o modelo de voz (`small`, cerca de 500 MB) é baixado.
+Depois disso, a voz funciona **sem internet**: o áudio é transcrito nesta máquina, na memória, e
+descartado. Nada é gravado em disco.
+
+O painel **Entrevista por voz**, no topo da aba Triagem, segue esta ordem:
+
+1. **Perguntas de segurança** (S), uma parte por vez. Pula as que não se aplicam ao paciente.
+2. **Relato do paciente** (Q01), ditado. O texto aparece numa caixa editável antes de confirmar.
+3. **Perguntas complementares**: a lista `perguntas_pendentes` do motor, na ordem de prioridade.
+
+Para cada resposta: **Gravar** → **Parar** → o painel mostra "Ouvi: …" e "Entendi: …" →
+**Confirmar** ou **Gravar de novo**. Nada entra na ficha sem o clique em Confirmar. Depois de
+cada confirmação a triagem é recalculada, e um sinal de alerta (cor laranja ou vermelha)
+aparece **na hora**, no topo do painel.
+
+A fala vira resposta **por código, sem IA** ([triagem/voz.py](triagem/voz.py)):
+
+| Resposta | Como é entendida |
+|---|---|
+| sim / não | "sim", "positivo", "tem falta de ar" → sim; "não", "nunca", "sem…" → não |
+| dúvida | "não sei", "acho que…", "talvez", "mais ou menos" → **não sabe** (nunca "não") |
+| recusa | "não quer responder", "prefiro não" → recusou |
+| nota 0 a 10 | "oito", "nota 8", "8" |
+| opções | nome da opção ou sinônimo ("fisgada" → pontada, "pressão alta" → hipertensão) |
+| tempo | "2 horas", "uma hora e meia", "meia hora", "ontem" |
+
+Frase com "sim" e "não" ao mesmo tempo, duas opções ou dois números **não é entendida**: o painel
+pede para gravar de novo ou responder na ficha. Com o relato ditado, o limite da Q01 passou de
+200 para **1000 caracteres** (cerca de 1 minuto de fala).
+
+O navegador pede permissão para usar o microfone na primeira gravação.
+
+### Aba Triagem
 
 - **Esquerda:** cadastro, aferições e o formulário de entrevista, montado a partir do próprio
   questionário (segurança, núcleo, módulos e complementares), com botões de "não sabe",
@@ -532,11 +593,48 @@ Opções: `--porta 9000` para outra porta; sem `--abrir`, só sobe o servidor. E
   JSON completo.
 - Com o `mock`, o resultado se atualiza enquanto você digita. Com o Ollama, clique em **Analisar**.
 - Há um seletor com as fichas de exemplo, inclusive as que falham de propósito.
+- **Colocar na fila:** gera o número de atendimento e mostra o QR do paciente. O servidor processa
+  a ficha de novo: a cor nunca vem do navegador.
 
-**Segurança:** escuta só em `127.0.0.1` (não aparece na rede), confere os cabeçalhos `Host` e
-`Origin`, limita o corpo a 1 MB, não carrega nada de fora (sem CDN nem fontes externas) e o texto
-digitado nunca vira HTML. Usa só a biblioteca padrão do Python, em
-[triagem/interface/](triagem/interface/).
+### Aba Fila
+
+Lista os pacientes chamados e, depois, os que aguardam, na ordem **cor → pontuação → chegada**.
+Mostra posição, número, cor, pontuação, motivo e espera, com os botões **Chamar**, **Atendido** e
+**Ver QR**. Atualiza sozinha a cada 5 segundos. A fila fica salva em SQLite
+([triagem/fila.py](triagem/fila.py)) e sobrevive a um reinício.
+
+### Página do paciente (QR)
+
+O paciente aponta a câmera para o QR, no Wi-Fi da unidade, e vê:
+
+- o **número de atendimento**;
+- a **cor** e o **motivo** em linguagem simples (campo `explicacao_paciente` de cada regra de cor);
+- uma **faixa** de pessoas à frente: "Você é o próximo", "De 1 a 3", "De 4 a 6", "De 7 a 10" ou
+  "Mais de 10";
+- quanto tempo já esperou e o **tempo-alvo** da cor;
+- a ordem geral das cores, com o aviso de que a posição pode mudar se chegar alguém mais grave.
+
+**Não mostra** a pontuação, a posição exata nem nada de outros pacientes. A página se recarrega
+sozinha a cada 20 segundos e não usa JavaScript. Quando o paciente é marcado como atendido, o
+código deixa de valer.
+
+Os tempos-alvo (vermelho imediato, laranja 10 min, amarelo 60, verde 120, azul 240) são os de
+referência do Protocolo de Manchester e ficam em `fila.tempos_alvo_minutos` no
+[regras.json](triagem/dados/regras.json), **marcados como não validados**.
+
+### Segurança
+
+- A **tela do enfermeiro** escuta só em `127.0.0.1` (não aparece na rede), confere os cabeçalhos
+  `Host` e `Origin`, limita o corpo a 1 MB, não carrega nada de fora (sem CDN nem fontes
+  externas) e o texto digitado nunca vira HTML.
+- A **página do paciente** é outro servidor, que só lê: responde `GET /p/<código>` e o CSS, e
+  devolve 404 para qualquer outra rota e 405 para qualquer escrita. Quem está no Wi-Fi não
+  alcança a triagem, a fila nem os exemplos. O código do QR é aleatório (`secrets`, 32
+  caracteres) e não tem nome, CPF nem número do cartão do SUS.
+
+O código está em [triagem/interface/](triagem/interface/). O QR é gerado com o
+[segno](https://pypi.org/project/segno/), sem rede. Sem ele instalado, a fila funciona e o QR
+não aparece.
 
 ## Avaliação do extrator
 
@@ -575,6 +673,8 @@ triagem/
   questionario.py         carrega e interpreta as respostas
   afericoes.py            aferições -> sinais medidos
   pontuacao.py, regras.py motor de cor e pontuação
+  fila.py                 fila de atendimento (SQLite) e o que o paciente vê
+  voz.py                  transcrição local (faster-whisper) e fala -> resposta, sem IA
   extracao.py             interface Extrator e contrato
   extrator_mock.py        extrator por palavras-chave
   extrator_ollama.py      extrator com modelo local
@@ -583,7 +683,9 @@ triagem/
   relato.py, avaliar.py, roteiro.py, ajustar.py   comandos auxiliares
   dados/questionario.json perguntas e aferições (fonte única)
   dados/regras.json       limites, regras de cor e pesos (não validados)
-  interface/              servidor e página da interface web
+  interface/servidor.py   tela do enfermeiro (127.0.0.1)
+  interface/paciente.py   página do paciente no Wi-Fi (só leitura)
+  interface/estatico/     HTML, CSS e JS das páginas
 exemplos/                 fichas simuladas
 avaliacao/                gabarito do extrator
 docs/roteiro_entrevista.md  roteiro do atendente (gerado)
@@ -600,7 +702,9 @@ geração_banco_dados.py, salus_treinamento.db   banco de casos simulados para t
   [triagem/dados/questionario.json](triagem/dados/questionario.json), rode `python -m triagem.roteiro`
   para gerar o roteiro de novo e `python -m pytest`. A interface se atualiza sozinha.
 - **Limite, regra de cor ou peso:** edite [triagem/dados/regras.json](triagem/dados/regras.json).
-  Nenhum número clínico fica no código Python. Peso negativo é recusado.
+  Nenhum número clínico fica no código Python. Peso negativo é recusado. Toda regra de cor
+  precisa de `explicacao_paciente`, o texto simples que o paciente vê no QR.
+- **Tempos-alvo da fila:** `fila.tempos_alvo_minutos` no mesmo arquivo, um por cor.
 - **Sinal novo:** além do questionário, inclua o nome em `NomeSinal`
   ([triagem/sinais.py](triagem/sinais.py)) e um peso em `regras.json`.
 - **Nunca** use relatos da partição de teste para escrever exemplos de prompt ou ajustar pesos.
@@ -618,3 +722,11 @@ geração_banco_dados.py, salus_treinamento.db   banco de casos simulados para t
   para ajustar pesos; o `triagem.ajustar` mostra isso (correlação perto de zero). Três casos têm
   pressão sistólica menor que a diastólica.
 - **Supabase e Hugging Face** estão nas dependências, mas ainda não são usados.
+- **Fila:** não há reclassificação. Se o paciente piorar, o enfermeiro marca como atendido e faz
+  uma nova triagem, que gera um novo número. O canal para o paciente avisar que piorou ainda não
+  existe; a página orienta procurar a recepção.
+- **Voz:** a precisão do reconhecimento em português ainda não foi medida com gravações reais
+  da equipe (os testes automáticos usam um transcritor falso). Teste com o microfone que será
+  usado na unidade, em ambiente com barulho.
+- **Fila:** não há login de enfermeiro. A tela só abre na própria máquina, mas qualquer pessoa
+  usando essa máquina consegue chamar e concluir pacientes.

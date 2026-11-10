@@ -7,9 +7,10 @@ import pytest
 from helpers import EXEMPLOS, RAIZ, rodar
 from triagem import cli, relato
 from triagem.schema import SaidaTriagem
+from triagem.texto import MAX_RELATO
 
 FICHA = EXEMPLOS / "ficha_exemplo.json"
-INVALIDAS = {"ficha_08_relato_201_falha.json": "Q01", "ficha_09_sem_idade_falha.json": "idade",
+INVALIDAS = {"ficha_08_relato_acima_do_limite_falha.json": "Q01", "ficha_09_sem_idade_falha.json": "idade",
              "ficha_10_tipo_resposta_errado_falha.json": "Q09", "ficha_14_dado_contraditorio_falha.json": "Q11"}
 
 
@@ -122,14 +123,14 @@ def test_relato_pelo_stdin_evita_expor_o_texto_na_linha_de_comando():
     assert r.returncode == 0 and saida_json(r)["relato_original"] == "dor no peito há 2 horas"
 
 
-@pytest.mark.parametrize("texto", ["", "   ", "x" * 201])
+@pytest.mark.parametrize("texto", ["", "   ", "x" * (MAX_RELATO + 1)])
 def test_relato_vazio_ou_longo_falha_sem_stdout(texto):
     r = rodar("triagem.relato", texto)
     assert r.returncode == 1 and r.stdout == b"" and r.stderr
 
 
-def test_relato_com_espacos_nas_pontas_e_200_caracteres_passa():
-    r = rodar("triagem.relato", "  " + "x" * 200 + "  ")
+def test_relato_com_espacos_nas_pontas_e_o_maximo_de_caracteres_passa():
+    r = rodar("triagem.relato", "  " + "x" * MAX_RELATO + "  ")
     assert r.returncode == 0
 
 

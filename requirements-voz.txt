@@ -1,0 +1,2 @@
+# Entrevista por voz (opcional). Transcrição local; o modelo (~500 MB) é baixado uma vez.
+faster-whisper==1.2.1
