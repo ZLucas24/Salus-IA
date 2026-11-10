@@ -20,7 +20,7 @@ from triagem.questionario import (PRIORIDADE, ErroResposta, carregar_questionari
 from triagem.regras import carregar_regras
 from triagem.schema import (Alergias, Alerta, DadosAtendente, Duracao, Resposta, SaidaTriagem,
                             Sinal)
-from triagem.sinais import Cor, NomeSinal, Origem, Queixa, Status
+from triagem.sinais import Cor, NomeSinal, Origem, Status
 
 log = logging.getLogger("triagem")
 

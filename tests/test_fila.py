@@ -466,6 +466,14 @@ def test_reclassificar_quem_nao_esta_na_fila(fila, numero):
     assert fila.ficha(numero) is None
 
 
+def test_atender_apaga_a_ficha_e_o_vinculo_com_a_base_de_treino(fila):
+    a = fila.entrar(cls("verde"), {"dados_atendente": {"idade": 40}, "respostas": {"Q01": "relato"}}, "mock")
+    assert fila.ficha(a["numero"])["caso_id"] == a["caso_id"]
+    fila.concluir(a["numero"])
+    linha = fila._con.execute("SELECT ficha, caso_id FROM pacientes WHERE numero = ?", (a["numero"],)).fetchone()
+    assert tuple(linha) == (None, None)
+
+
 def test_atendido_nao_pode_ser_reclassificado(fila):
     a = fila.entrar(cls("verde"))
     fila.concluir(a["numero"])
@@ -496,7 +504,7 @@ def test_api_reclassificar(servidores):
     enf, pac, _ = servidores
     r = json.loads(chamar(enf, "POST", "/api/fila", {"ficha": FICHA_LEVE})[1])
     status, corpo = chamar(enf, "POST", "/api/fila/ficha", {"numero": r["numero"]})
-    assert status == 200 and json.loads(corpo)["ficha"] == FICHA_LEVE
+    assert status == 200 and json.loads(corpo)["ficha"] == FICHA_LEVE and b"caso_id" not in corpo
     status, corpo = chamar(enf, "POST", "/api/fila/reclassificar", {"numero": r["numero"], "ficha": FICHA_GRAVE})
     resp = json.loads(corpo)
     assert status == 200 and (resp["cor_antes"], resp["cor_depois"]) == ("verde", "laranja")

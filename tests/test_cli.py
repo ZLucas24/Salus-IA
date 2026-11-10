@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from helpers import EXEMPLOS, RAIZ, rodar
+from helpers import EXEMPLOS, rodar
 from triagem import cli, relato
 from triagem.schema import SaidaTriagem
 from triagem.texto import MAX_RELATO

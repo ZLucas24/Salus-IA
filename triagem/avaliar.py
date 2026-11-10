@@ -26,7 +26,6 @@ from pathlib import Path
 from triagem.cli import configurar_io
 from triagem.extracao import Extracao, criar_extrator
 from triagem.extrator_ollama import EXEMPLOS, INSTRUCOES, OllamaExtrator
-from triagem.sinais import Status
 from triagem.texto import normalizar_itens, sem_acentos
 
 PASTA = Path(__file__).parent.parent / "avaliacao"

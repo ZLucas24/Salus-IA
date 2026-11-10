@@ -12,8 +12,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from triagem.schema import Alergias, DadosAtendente, Duracao, Sinal
-from triagem.sinais import (MARCADORES, SINAIS_MEDIDOS, NomeSinal, Origem, SexoBiologico,
-                            Status)
+from triagem.sinais import MARCADORES, SINAIS_MEDIDOS, NomeSinal, Origem, Status
 from triagem.texto import normalizar_itens
 
 CAMINHO_QUESTIONARIO = Path(__file__).parent / "dados" / "questionario.json"

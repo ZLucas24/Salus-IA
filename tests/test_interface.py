@@ -176,3 +176,10 @@ def test_comando_exige_ao_menos_uma_conta(tmp_path, capfd):
     assert servidor.main(["--porta", "0", "--sem-paciente", "--sem-voz", "--sem-treino",
                           "--fila", str(tmp_path / "fila.db"), "--usuarios", str(tmp_path / "vazio.db")]) == 2
     assert "triagem.usuarios criar" in capfd.readouterr().err
+
+
+def test_estilo_dinamico_vai_pelo_cssom_por_causa_da_csp():
+    """A CSP (style-src 'self') bloqueia o atributo style=""; sem isto a barra da pontuação fica cheia."""
+    js = (PASTA_ESTATICA / "app.js").read_text(encoding="utf-8")
+    assert "el.style.cssText = v" in js and "setAttribute('style'" not in js
+    assert "style=" not in (PASTA_ESTATICA / "index.html").read_text(encoding="utf-8")

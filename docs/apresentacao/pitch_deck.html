@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>salUS.ia — Pitch Deck</title>
+<!-- Fonte do pitch deck. Para gerar o PDF: abrir no Chrome e imprimir em PDF (sem margens,
+     com gráficos de plano de fundo), ou usar o Chrome em modo headless com --print-to-pdf. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap">
+<style>
+:root {
+  --fundo: #e1ebe5; --cartao: #cfdfd5; --tinta: #17352a; --tinta-suave: #2f4a40;
+  --marca: #2d6a4f; --linha: #b9cdc1;
+}
+@page { size: 1456px 816px; margin: 0; }
+* { box-sizing: border-box; }
+html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+body { margin: 0; background: var(--fundo); color: var(--tinta); font: 500 20px/1.45 "Plus Jakarta Sans", "Segoe UI", system-ui, sans-serif; }
+.slide { width: 1456px; height: 816px; padding: 64px 91px; position: relative; overflow: hidden; break-after: page; display: flex; flex-direction: column; background: var(--fundo); }
+.slide:last-child { break-after: auto; }
+.selo { font-size: 17px; font-weight: 700; letter-spacing: .11em; text-transform: uppercase; color: var(--marca); margin: 0; }
+h1 { font-size: 76px; line-height: 1.04; font-weight: 800; letter-spacing: -.03em; margin: 14px 0 0; }
+h1 span { color: var(--marca); display: block; }
+h2 { font-size: 46px; line-height: 1.1; font-weight: 800; letter-spacing: -.025em; margin: 10px 0 0; }
+h3 { font-size: 25px; line-height: 1.2; font-weight: 800; letter-spacing: -.01em; margin: 0; }
+p { margin: 0; }
+.logo { font-size: 30px; font-weight: 800; letter-spacing: -.02em; }
+.logo span { color: var(--marca); }
+.centro { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+.grade { display: grid; gap: 28px; margin-top: auto; margin-bottom: auto; }
+.g2 { grid-template-columns: 1fr 1fr; gap: 46px; } .g3 { grid-template-columns: repeat(3, 1fr); gap: 36px; } .g4 { grid-template-columns: repeat(4, 1fr); }
+.cartao { background: var(--cartao); border-radius: 10px; padding: 34px 30px 36px; display: flex; flex-direction: column; gap: 12px; color: var(--tinta-suave); }
+.cartao h3 { color: var(--tinta); }
+.topo { border-top: 5px solid var(--marca); }
+.lado { border-left: 8px solid var(--marca); padding-left: 46px; }
+.lado.escuro, .topo.escuro { border-color: var(--tinta); }
+.tag { font-size: 15px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--marca); margin-top: 8px; }
+.g4 .cartao { padding: 26px 26px 30px; font-size: 18px; }
+.g4 h3 { font-size: 23px; }
+.grande { font-size: 42px; font-weight: 800; color: var(--marca); letter-spacing: -.02em; line-height: 1; }
+.lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.lista li { padding: 16px 0; border-bottom: 1px solid var(--linha); color: var(--tinta-suave); font-size: 18px; }
+.lista li:last-child { border-bottom: 0; }
+.lista h3 { font-size: 23px; margin-bottom: 4px; color: var(--tinta); }
+.destaque { border: 2px solid var(--marca); background: var(--cartao); border-radius: 10px; padding: 44px 40px; }
+.destaque p.frase { font-size: 31px; font-weight: 800; line-height: 1.25; letter-spacing: -.015em; margin-top: 12px; }
+.pontos { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; }
+.pontos li::before { content: "• "; }
+.rodape { border-top: 2px solid var(--linha); padding-top: 22px; display: flex; gap: 46px; align-items: baseline; font-size: 17px; font-weight: 700; }
+.rodape .suave { color: var(--marca); font-weight: 600; }
+.entre { justify-content: space-between; }
+.mini h3 { font-size: 22px; } .mini p { font-size: 16.5px; color: var(--tinta-suave); }
+.mini { border-left: 4px solid var(--marca); padding-left: 18px; }
+.pronto { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px 30px; margin-top: auto; margin-bottom: auto; }
+.pronto .cartao { padding: 22px 24px 24px; font-size: 17px; gap: 6px; }
+.pronto h3 { font-size: 21px; }
+.nota { font-size: 16px; color: var(--tinta-suave); }
+</style>
+</head>
+<body>
+
+<section class="slide">
+  <div style="display:flex" class="entre"><p class="logo">salUS<span>.ia</span></p><p class="selo">Pitch Deck 2026</p></div>
+  <div class="centro">
+    <p class="selo">Triagem hospitalar com inteligência artificial</p>
+    <h1>Agilidade na urgência.<span>Decisão humana no centro.</span></h1>
+    <p style="font-size:26px;max-width:800px;margin-top:26px;color:var(--tinta-suave)">Copiloto inteligente para classificação de risco e gestão da fila, no SUS e na rede privada.</p>
+  </div>
+  <div class="rodape"><span>AKCIT Camp 2026</span><span class="suave">São Paulo • SP</span></div>
+</section>
+
+<section class="slide">
+  <p class="selo">O gargalo</p>
+  <h2>Onde o atendimento da urgência trava</h2>
+  <div class="grade g2">
+    <div class="cartao lado escuro"><h3>Para o Paciente</h3>
+      <p>Horas de espera sem previsão, sem canal direto para notificar piora e sem visibilidade sobre sua real prioridade na fila.</p>
+      <p class="tag">Insegurança e ansiedade</p></div>
+    <div class="cartao lado"><h3>Para a Enfermagem</h3>
+      <p>Sobrecarga com entrevistas repetitivas e digitação manual em vez de focar na avaliação de casos clínicos complexos.</p>
+      <p class="tag">Gargalo operacional</p></div>
+  </div>
+</section>
+
+<section class="slide">
+  <p class="selo">A solução</p>
+  <h2>Triagem auxiliada por IA de ponta a ponta</h2>
+  <div class="grade g4">
+    <div class="cartao topo"><h3>1. Entrevista por Voz</h3><p>O enfermeiro dita as respostas; o agente lê o relato livre em português e sugere a próxima pergunta.</p></div>
+    <div class="cartao topo"><h3>2. Fila Dinâmica</h3><p>Pontuação de 0 a 100 que ordena a prioridade dentro da mesma cor. Reclassificar não muda o número.</p></div>
+    <div class="cartao topo"><h3>3. Transparência</h3><p>Paciente recebe QR code com sua cor, o motivo e uma faixa de posição na fila.</p></div>
+    <div class="cartao topo"><h3>4. Alerta de Piora</h3><p>Pelo QR, o paciente avisa que piorou e a equipe é alertada na hora.</p></div>
+  </div>
+</section>
+
+<section class="slide">
+  <p class="selo">Segurança por arquitetura</p>
+  <h2>A IA apoia. A decisão é do profissional.</h2>
+  <div class="grade g2" style="align-items:center;grid-template-columns:1.25fr 1fr">
+    <ul class="lista">
+      <li><h3>Decisão Sempre Humana</h3>O enfermeiro valida e dá a palavra final. A IA atua estritamente como copiloto.</li>
+      <li><h3>Motor de Regras Auditável</h3>A cor vem de regras explícitas, que mostram o motivo de cada resultado, e não do modelo de linguagem.</li>
+      <li><h3>Proteção Anti-Regressão</h3>A IA nunca reduz uma pontuação. Só o profissional baixa uma prioridade, com confirmação.</li>
+      <li><h3>Privacidade e Rastreio</h3>Voz transcrita na própria máquina, login do enfermeiro e registro de quem fez cada ação.</li>
+    </ul>
+    <div class="destaque"><p class="selo">Princípio fundamental</p><p class="frase">A tecnologia não substitui a sensibilidade e a responsabilidade clínica.</p></div>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="centro"><div class="lado" style="padding-left:38px">
+    <p class="selo">Protótipo funcional</p>
+    <h1 style="font-size:64px;margin-top:10px">Demonstração do Sistema</h1>
+    <p style="font-size:25px;max-width:900px;margin-top:18px;color:var(--tinta-suave)">Triagem por voz, cálculo de pontuação, fila com QR do paciente, aviso de piora e reclassificação.</p>
+  </div></div>
+</section>
+
+<section class="slide">
+  <p class="selo">Estágio atual</p>
+  <h2>O que já funciona no protótipo</h2>
+  <div class="pronto">
+    <div class="cartao topo"><h3>Entrevista por voz</h3><p>Transcrição local, sem internet, com confirmação do enfermeiro a cada resposta.</p></div>
+    <div class="cartao topo"><h3>Motor de regras</h3><p>17 regras de cor e pesos explícitos; cada resultado mostra a regra que o gerou.</p></div>
+    <div class="cartao topo"><h3>Fila com QR</h3><p>Paciente acompanha cor, motivo e faixa de espera pelo celular, no Wi-Fi da unidade.</p></div>
+    <div class="cartao topo"><h3>Aviso de piora</h3><p>Um toque no celular alerta a equipe; o enfermeiro reclassifica sem gerar novo número.</p></div>
+    <div class="cartao topo"><h3>Login e rastreio</h3><p>Acesso por conta de enfermeiro e registro de quem fez cada ação na fila.</p></div>
+    <div class="cartao topo"><h3>Base de treino</h3><p>Casos anonimizados para medir e melhorar a leitura do relato pela IA.</p></div>
+  </div>
+  <p class="nota">473 testes automatizados. Dados simulados; regras ainda sem validação clínica, que é a Fase 1 do roteiro.</p>
+</section>
+
+<section class="slide">
+  <p class="selo">Mercado &amp; clientes</p>
+  <h2>Modelo de Atuação B2B</h2>
+  <div class="grade g2">
+    <div class="cartao topo escuro"><h3>Clientes Contratantes</h3><ul class="pontos">
+      <li>Organizações Sociais de Saúde (OSS)</li><li>Hospitais Filantrópicos e Privados</li>
+      <li>Secretarias Municipais e Estaduais de Saúde</li><li>Redes de Urgência e UPAs</li></ul></div>
+    <div class="cartao topo"><h3>Usuários Finais</h3><ul class="pontos">
+      <li>Enfermeiros de Triagem</li><li>Técnicos de Enfermagem</li>
+      <li>Médicos Plantonistas</li><li>Pacientes na Sala de Espera</li></ul></div>
+  </div>
+</section>
+
+<section class="slide">
+  <p class="selo">Proposta de valor</p>
+  <h2>Retorno para a Instituição de Saúde</h2>
+  <div class="grade g3">
+    <div class="cartao"><p class="grande">Eficiência</p><h3 style="font-size:21px">Tempo Reduzido</h3><p style="font-size:18px">Menos tempo em tarefas operacionais e mais agilidade no primeiro contato.</p></div>
+    <div class="cartao"><p class="grande">Qualidade</p><h3 style="font-size:21px">Cuidado Humano</h3><p style="font-size:18px">Profissionais dedicam atenção aos casos graves e prioritários.</p></div>
+    <div class="cartao"><p class="grande">Gestão</p><h3 style="font-size:21px">Recursos Otimizados</h3><p style="font-size:18px">Fila organizada e dados claros sobre o fluxo de atendimento da unidade.</p></div>
+  </div>
+</section>
+
+<section class="slide">
+  <p class="selo">Modelo de negócio</p>
+  <h2>Software as a Service (SaaS)</h2>
+  <div class="grade g2" style="align-items:center;grid-template-columns:1.7fr 1fr">
+    <div class="cartao lado" style="padding-top:54px;padding-bottom:58px"><h3 style="font-size:32px">Assinatura por Unidade</h3>
+      <p style="font-size:22px">Cobrança mensal por hospital ou UPA contratante, com suporte contínuo, manutenção e atualizações incluídas.</p></div>
+    <div style="display:flex;flex-direction:column;gap:26px">
+      <div class="mini"><h3>Sem Custo de Dev Interno</h3><p>A instituição utiliza tecnologia de ponta sem criar infraestrutura do zero.</p></div>
+      <div class="mini"><h3>Evolução Contínua</h3><p>Algoritmos e regras constantemente aprimorados e auditados.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <p class="selo">Roteiro de validação</p>
+  <h2>Próximos Passos</h2>
+  <div class="grade g3">
+    <div class="cartao topo escuro"><p class="tag" style="margin:0">Fase 1</p><h3>Entrevistas Clínicas</h3><p style="font-size:18px">Validação das regras com enfermeiros e médicos da UPA da universidade.</p></div>
+    <div class="cartao topo"><p class="tag" style="margin:0">Fase 2</p><h3>Piloto em 1 Unidade</h3><p style="font-size:18px">Teste prático em ambiente controlado após aprovações éticas/regulatórias.</p></div>
+    <div class="cartao topo"><p class="tag" style="margin:0">Fase 3</p><h3>Integração PEP</h3><p style="font-size:18px">Conectividade com prontuários eletrônicos sob total conformidade LGPD.</p></div>
+  </div>
+</section>
+
+<section class="slide">
+  <p class="logo">salUS<span>.ia</span></p>
+  <div class="centro">
+    <p class="selo">Nosso propósito</p>
+    <h1 style="font-size:60px;max-width:880px;line-height:1.1">A tecnologia não deve substituir o cuidado humano, mas oferecer condições para que ele aconteça melhor.</h1>
+  </div>
+  <div class="rodape entre"><span style="font-weight:600">Obrigado!</span><span class="suave" style="font-weight:700">startup.salus.ia@gmail.com</span></div>
+</section>
+
+</body>
+</html>
