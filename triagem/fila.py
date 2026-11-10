@@ -107,7 +107,9 @@ class Fila:
                 )""")
             # colunas novas em filas criadas por versões anteriores
             colunas = {c["name"] for c in self._con.execute("PRAGMA table_info(pacientes)")}
-            for nome, tipo in (("ficha", "TEXT"), ("extrator", "TEXT"), ("reclassificado_em", "REAL")):
+            for nome, tipo in (("ficha", "TEXT"), ("extrator", "TEXT"), ("reclassificado_em", "REAL"),
+                               ("triado_por", "TEXT"), ("chamado_por", "TEXT"), ("atendido_por", "TEXT"),
+                               ("caso_id", "TEXT")):
                 if nome not in colunas:
                     self._con.execute(f"ALTER TABLE pacientes ADD COLUMN {nome} {tipo}")
             self._con.execute("""
@@ -120,6 +122,8 @@ class Fila:
                     pontuacao_depois INTEGER NOT NULL,
                     em              REAL NOT NULL
                 )""")
+            if "por" not in {c["name"] for c in self._con.execute("PRAGMA table_info(reclassificacoes)")}:
+                self._con.execute("ALTER TABLE reclassificacoes ADD COLUMN por TEXT")
             self._con.execute("""
                 CREATE TABLE IF NOT EXISTS avisos (
                     id        INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -128,22 +132,29 @@ class Fila:
                     criado_em REAL NOT NULL,
                     visto_em  REAL
                 )""")
+            if "visto_por" not in {c["name"] for c in self._con.execute("PRAGMA table_info(avisos)")}:
+                self._con.execute("ALTER TABLE avisos ADD COLUMN visto_por TEXT")
 
     def fechar(self) -> None:
         self._con.close()
 
     # --- escrita ------------------------------------------------------------------------
-    def entrar(self, classificacao: Classificacao, ficha: dict | None = None, extrator: str | None = None) -> dict:
-        """Põe o paciente na fila. A ficha fica guardada (só nesta máquina) para a reclassificação."""
+    def entrar(self, classificacao: Classificacao, ficha: dict | None = None, extrator: str | None = None,
+               por: str | None = None) -> dict:
+        """Põe o paciente na fila. A ficha fica guardada (só nesta máquina) para a reclassificação.
+
+        `caso_id` é um código aleatório que liga este atendimento ao registro anônimo da base de
+        treino (o registro de lá não tem número, código do QR nem nome)."""
         token = secrets.token_urlsafe(24)
+        caso_id = secrets.token_hex(8)
         with self._trava, self._con:
             cur = self._con.execute(
-                "INSERT INTO pacientes (token, cor, nivel, pontuacao, motivos, chegada, estado, ficha, extrator) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO pacientes (token, cor, nivel, pontuacao, motivos, chegada, estado, ficha, extrator, "
+                "triado_por, caso_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (token, classificacao.cor.value, classificacao.cor.nivel, classificacao.pontuacao,
                  json.dumps(explicacoes(classificacao), ensure_ascii=False), self._relogio(), AGUARDANDO,
-                 json.dumps(ficha, ensure_ascii=False) if ficha is not None else None, extrator))
-        return {"numero": cur.lastrowid, "token": token}
+                 json.dumps(ficha, ensure_ascii=False) if ficha is not None else None, extrator, por, caso_id))
+        return {"numero": cur.lastrowid, "token": token, "caso_id": caso_id}
 
     def ficha(self, numero: int) -> dict | None:
         """Ficha guardada de quem ainda está na fila (aguardando ou chamado)."""
@@ -155,10 +166,11 @@ class Fila:
         if p is None:
             return None
         return {"numero": p["numero"], "cor": p["cor"], "pontuacao": p["pontuacao"],
-                "ficha": json.loads(p["ficha"]) if p["ficha"] else None, "extrator": p["extrator"]}
+                "ficha": json.loads(p["ficha"]) if p["ficha"] else None, "extrator": p["extrator"],
+                "caso_id": p["caso_id"]}
 
     def reclassificar(self, numero: int, classificacao: Classificacao, ficha: dict, extrator: str,
-                      permitir_reducao: bool = False) -> dict:
+                      permitir_reducao: bool = False, por: str | None = None) -> dict:
         """Troca a classificação de quem já está na fila, mantendo número, QR e hora de chegada.
 
         Se a cor nova for MAIS BAIXA, só aplica com `permitir_reducao=True` (confirmação explícita
@@ -175,7 +187,8 @@ class Fila:
             if p is None:
                 return {"ok": False, "motivo": "nao_encontrado"}
             resumo = {"numero": numero, "cor_antes": p["cor"], "cor_depois": nova.value,
-                      "pontuacao_antes": p["pontuacao"], "pontuacao_depois": classificacao.pontuacao}
+                      "pontuacao_antes": p["pontuacao"], "pontuacao_depois": classificacao.pontuacao,
+                      "caso_id": p["caso_id"]}
             if nova.nivel < p["nivel"] and not permitir_reducao:
                 return {"ok": False, "motivo": "precisa_confirmar", **resumo}
             self._con.execute(
@@ -185,34 +198,35 @@ class Fila:
                  json.dumps(explicacoes(classificacao), ensure_ascii=False),
                  json.dumps(ficha, ensure_ascii=False), extrator, agora, numero))
             self._con.execute(
-                "INSERT INTO reclassificacoes (numero, cor_antes, cor_depois, pontuacao_antes, pontuacao_depois, em) "
-                "VALUES (?, ?, ?, ?, ?, ?)",
-                (numero, p["cor"], nova.value, p["pontuacao"], classificacao.pontuacao, agora))
-            self._con.execute("UPDATE avisos SET visto_em = ? WHERE numero = ? AND visto_em IS NULL",
-                              (agora, numero))
+                "INSERT INTO reclassificacoes (numero, cor_antes, cor_depois, pontuacao_antes, pontuacao_depois, "
+                "em, por) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (numero, p["cor"], nova.value, p["pontuacao"], classificacao.pontuacao, agora, por))
+            self._con.execute("UPDATE avisos SET visto_em = ?, visto_por = ? WHERE numero = ? AND visto_em IS NULL",
+                              (agora, por, numero))
         return {"ok": True, **resumo}
 
     def historico(self, numero: int) -> list[dict]:
         with self._trava:
             linhas = self._con.execute(
-                "SELECT cor_antes, cor_depois, pontuacao_antes, pontuacao_depois, em FROM reclassificacoes "
+                "SELECT cor_antes, cor_depois, pontuacao_antes, pontuacao_depois, em, por FROM reclassificacoes "
                 "WHERE numero = ? ORDER BY em, id", (numero,)).fetchall()
         return [dict(x) for x in linhas]
 
-    def chamar(self, numero: int) -> bool:
-        return self._mudar(numero, CHAMADO, "chamado_em", de=(AGUARDANDO,))
+    def chamar(self, numero: int, por: str | None = None) -> bool:
+        return self._mudar(numero, CHAMADO, "chamado", por, de=(AGUARDANDO,))
 
-    def concluir(self, numero: int) -> bool:
-        return self._mudar(numero, ATENDIDO, "atendido_em", de=(AGUARDANDO, CHAMADO))
+    def concluir(self, numero: int, por: str | None = None) -> bool:
+        return self._mudar(numero, ATENDIDO, "atendido", por, de=(AGUARDANDO, CHAMADO))
 
-    def _mudar(self, numero, novo: str, coluna: str, de: tuple[str, ...]) -> bool:
+    def _mudar(self, numero, novo: str, prefixo: str, por: str | None, de: tuple[str, ...]) -> bool:
         if not isinstance(numero, int) or isinstance(numero, bool):
             return False
         marcas = ",".join("?" * len(de))
         with self._trava, self._con:
             cur = self._con.execute(
-                f"UPDATE pacientes SET estado = ?, {coluna} = ? WHERE numero = ? AND estado IN ({marcas})",
-                (novo, self._relogio(), numero, *de))
+                f"UPDATE pacientes SET estado = ?, {prefixo}_em = ?, {prefixo}_por = ? "
+                f"WHERE numero = ? AND estado IN ({marcas})",
+                (novo, self._relogio(), por, numero, *de))
         return cur.rowcount == 1
 
     def avisar_piora(self, token: str, motivo: str) -> str:
@@ -232,12 +246,13 @@ class Fila:
                               (p["numero"], motivo, agora))
         return AVISO_OK
 
-    def marcar_aviso_visto(self, numero: int) -> bool:
+    def marcar_aviso_visto(self, numero: int, por: str | None = None) -> bool:
         if not isinstance(numero, int) or isinstance(numero, bool):
             return False
         with self._trava, self._con:
-            cur = self._con.execute("UPDATE avisos SET visto_em = ? WHERE numero = ? AND visto_em IS NULL",
-                                    (self._relogio(), numero))
+            cur = self._con.execute(
+                "UPDATE avisos SET visto_em = ?, visto_por = ? WHERE numero = ? AND visto_em IS NULL",
+                (self._relogio(), por, numero))
         return cur.rowcount > 0
 
     def avisos_pendentes(self) -> list[dict]:
@@ -276,7 +291,7 @@ class Fila:
         return {"numero": p["numero"], "cor": p["cor"], "pontuacao": p["pontuacao"],
                 "motivos": json.loads(p["motivos"]), "estado": p["estado"], "posicao": posicao,
                 "espera_min": int((agora - p["chegada"]) // 60), "token": p["token"],
-                "avisos_piora": avisos.get(p["numero"], []),
+                "avisos_piora": avisos.get(p["numero"], []), "triado_por": p["triado_por"],
                 "reclassificado_ha_min": (int((agora - p["reclassificado_em"]) // 60)
                                           if p["reclassificado_em"] is not None else None)}
 

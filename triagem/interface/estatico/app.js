@@ -70,6 +70,14 @@ const CADASTRO = [
   ['glicemia', 'Glicemia (mg/dL)', 'numero'], ['glasgow', 'Glasgow (3 a 15)', 'inteiro'],
 ];
 
+// sessão expirada ou ausente: qualquer resposta 401 manda para a tela de login
+const fetchOriginal = window.fetch.bind(window);
+window.fetch = async (...args) => {
+  const r = await fetchOriginal(...args);
+  if (r.status === 401) window.location.href = '/login';
+  return r;
+};
+
 const humanizar = (s) => { const t = String(s).replace(/_/g, ' '); return t.charAt(0).toUpperCase() + t.slice(1); };
 const rotulo = (v) => ROTULOS[v] ?? humanizar(v);
 const nomeSinal = (n) => SINAIS[n] ?? humanizar(n);
@@ -884,6 +892,10 @@ async function iniciar() {
     return;
   }
   const q = estado.dados;
+  try {
+    const eu = await (await fetch('/api/eu')).json();
+    if (eu && eu.login) { $('#usuario-nome').textContent = eu.nome; $('#usuario').hidden = false; }
+  } catch (e) { /* sem login (modo de teste): nada a mostrar */ }
   $('#selo-regras').textContent = q.regras.validado ? 'regras validadas' : 'regras não validadas';
   $('#selo-versao').textContent = `questionário ${q.versao}`;
   $('#extrator').replaceChildren(...q.extratores.map((e) => h('option', { value: e, texto: e === 'mock' ? 'Palavras-chave (mock)' : 'Modelo local (Ollama)' })));
