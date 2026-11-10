@@ -13,6 +13,7 @@ Escuta apenas em 127.0.0.1 e serve:
   POST /api/fila/qr           {"numero": 7} -> {"numero", "url", "qr"} (mostrar o QR de novo)
   POST /api/fila/chamar       {"numero": 7}
   POST /api/fila/concluir     {"numero": 7} (o código do QR deixa de valer)
+  POST /api/fila/aviso-visto  {"numero": 7} (o enfermeiro viu o aviso de piora do paciente)
   POST /api/voz?pergunta=Q09&parte=resposta   corpo = áudio gravado (audio/webm, audio/wav...)
                               -> {"transcricao", "valor", "entendido", "motivo"}
                               O áudio é transcrito na memória e descartado; nada é gravado.
@@ -188,7 +189,8 @@ class Manipulador(BaseHTTPRequestHandler):
             return self._json(200, listar_exemplos())
         if caminho == "/api/fila":
             pacientes = [{k: v for k, v in p.items() if k != "token"} for p in self.server.fila.listar()]
-            return self._json(200, {"pacientes": pacientes, "pagina_paciente": bool(self.server.url_paciente)})
+            return self._json(200, {"pacientes": pacientes, "avisos": self.server.fila.avisos_pendentes(),
+                                    "pagina_paciente": bool(self.server.url_paciente)})
         self._erro(HTTPStatus.NOT_FOUND, "não encontrado")
 
     def _arquivo(self, nome: str) -> None:
@@ -293,9 +295,15 @@ class Manipulador(BaseHTTPRequestHandler):
             return 200, {"ok": True}
         return 404, {"erros": ["paciente não está na fila"]}
 
+    def _fila_aviso_visto(self, corpo: dict) -> tuple[int, dict]:
+        if self.server.fila.marcar_aviso_visto(self._numero(corpo)):
+            return 200, {"ok": True}
+        return 404, {"erros": ["não há aviso pendente para este paciente"]}
+
 
 ROTAS_POST = {"/api/triagem": "_triagem", "/api/fila": "_fila_entrar", "/api/fila/qr": "_fila_qr",
-              "/api/fila/chamar": "_fila_chamar", "/api/fila/concluir": "_fila_concluir"}
+              "/api/fila/chamar": "_fila_chamar", "/api/fila/concluir": "_fila_concluir",
+              "/api/fila/aviso-visto": "_fila_aviso_visto"}
 
 
 class ServidorLocal(ThreadingHTTPServer):

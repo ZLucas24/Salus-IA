@@ -723,17 +723,48 @@ async function acaoFila(rota, numero) {
   }
 }
 
+const avisosVistos = new Set(); // ids já anunciados com som
+
+function bipe() {
+  try {
+    const ctx = new AudioContext();
+    [0, 0.25].forEach((t) => {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.frequency.value = 880; g.gain.value = 0.15;
+      o.connect(g).connect(ctx.destination);
+      o.start(ctx.currentTime + t); o.stop(ctx.currentTime + t + 0.15);
+    });
+  } catch (e) { /* sem som: o aviso visual continua */ }
+}
+
+function mostrarAvisos(avisos) {
+  const caixa = $('#avisos-piora');
+  caixa.hidden = !avisos.length;
+  $('#aba-fila').classList.toggle('com-aviso', avisos.length > 0);
+  if (avisos.some((a) => !avisosVistos.has(a.id))) bipe();
+  avisos.forEach((a) => avisosVistos.add(a.id));
+  caixa.replaceChildren(...avisos.map((a) => h('div', { class: 'aviso-piora' },
+    h('span', { class: `cor-chip cor-${a.cor}`, texto: numeroFila(a.numero) }),
+    h('span', {}, h('strong', { texto: 'Paciente avisou que piorou: ' }), `${a.motivo} · ${a.ha_min ? `há ${a.ha_min} min` : 'agora'}`),
+    h('span', { class: 'acoes' },
+      h('button', { type: 'button', class: 'pilula secundaria', texto: 'Ver na fila', onclick: () => mostrarTela('fila') }),
+      h('button', { type: 'button', class: 'pilula', texto: 'Vi o aviso', onclick: () => acaoFila('/api/fila/aviso-visto', a.numero) })))));
+}
+
 function linhaFila(p) {
   const acoes = [];
+  if (p.avisos_piora.length) acoes.push(h('button', { type: 'button', class: 'pilula', texto: 'Vi o aviso', onclick: () => acaoFila('/api/fila/aviso-visto', p.numero) }));
   if (p.estado === 'aguardando') acoes.push(h('button', { type: 'button', class: 'pilula', texto: 'Chamar', onclick: () => acaoFila('/api/fila/chamar', p.numero) }));
   acoes.push(h('button', { type: 'button', class: 'pilula secundaria', texto: 'Atendido', onclick: () => acaoFila('/api/fila/concluir', p.numero) }));
   acoes.push(h('button', { type: 'button', class: 'pilula secundaria', texto: 'Ver QR', onclick: () => acaoFila('/api/fila/qr', p.numero) }));
-  return h('tr', { class: p.estado === 'chamado' ? 'chamado' : '' },
+  return h('tr', { class: [p.estado === 'chamado' ? 'chamado' : '', p.avisos_piora.length ? 'piorou' : ''].join(' ').trim() },
     h('td', { class: 'num', texto: p.posicao ? `${p.posicao}º` : 'chamado' }),
     h('td', { class: 'num', texto: numeroFila(p.numero) }),
     h('td', {}, h('span', { class: `cor-chip cor-${p.cor}`, texto: CORES[p.cor] ?? p.cor })),
     h('td', { class: 'num', texto: String(p.pontuacao) }),
-    h('td', { class: 'col-motivos' }, h('ul', { class: 'motivos-fila' }, p.motivos.map((m) => h('li', { texto: m })))),
+    h('td', { class: 'col-motivos' },
+      p.avisos_piora.map((a) => h('p', { class: 'piorou-texto', texto: `Piorou: ${a.motivo} · ${a.ha_min ? `há ${a.ha_min} min` : 'agora'}` })),
+      h('ul', { class: 'motivos-fila' }, p.motivos.map((m) => h('li', { texto: m })))),
     h('td', { texto: `${p.espera_min} min` }),
     h('td', { class: 'col-acoes' }, h('div', { class: 'acoes' }, acoes)));
 }
@@ -746,6 +777,7 @@ async function carregarFila() {
     $('#lista-fila').replaceChildren(h('p', { class: 'dica', texto: `Não foi possível carregar a fila (${e.message}).` }));
     return;
   }
+  mostrarAvisos(dados.avisos);
   const aguardando = dados.pacientes.filter((p) => p.estado === 'aguardando').length;
   $('#contador-fila').textContent = String(aguardando);
   $('#aviso-paciente').textContent = dados.pagina_paciente
