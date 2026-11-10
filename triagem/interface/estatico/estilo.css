@@ -218,6 +218,22 @@ dialog::backdrop { background: rgba(10, 20, 18, .55); }
 #qr-imagem { background: #fff; border-radius: 12px; image-rendering: pixelated; }
 .qr-url { font-size: .75rem; color: var(--tinta-suave); word-break: break-all; }
 
+/* avisos de piora (aparecem nas duas abas) */
+.avisos-piora { max-width: 1280px; margin: 12px auto 0; padding: 0 16px; display: grid; gap: 8px; }
+.avisos-piora[hidden] { display: none; }
+.aviso-piora {
+  display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; background: var(--vermelho-fundo);
+  border: 2px solid var(--vermelho); border-radius: 14px; padding: 10px 14px;
+}
+.aviso-piora .acoes { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; }
+.aba.com-aviso .contador { background: var(--vermelho); }
+.tabela-fila tr.piorou td { background: var(--vermelho-fundo); }
+.piorou-texto { color: var(--vermelho); font-weight: 800; font-size: .875rem; margin-bottom: 4px; }
+@media (prefers-reduced-motion: no-preference) {
+  .aviso-piora { animation: pulsar 1.6s ease-in-out 3; }
+  @keyframes pulsar { 50% { box-shadow: 0 0 0 6px var(--vermelho-fundo); } }
+}
+
 /* barra fixa com o resultado, só em tela estreita */
 .mini { display: none; }
 @media (max-width: 980px) {

@@ -56,3 +56,17 @@ header { text-align: center; }
 .ordem .nome { flex: 1; min-width: 0; }
 .ordem .tempo { font-size: .9rem; white-space: nowrap; }
 .rodape { text-align: center; color: var(--tinta-suave); font-size: .85rem; }
+
+/* aviso de piora */
+.piora { border: 2px solid var(--vermelho); }
+.urgente { background: var(--vermelho-fundo); color: var(--vermelho); border-radius: 10px; padding: 10px 12px; }
+.botoes-piora { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
+.botoes-piora button {
+  font: inherit; font-weight: 700; color: var(--tinta); background: var(--fundo);
+  border: 1.5px solid var(--linha); border-radius: 12px; padding: 12px 10px; min-height: 52px; cursor: pointer;
+}
+.botoes-piora button:active { background: var(--vermelho-fundo); border-color: var(--vermelho); }
+.msg { font-weight: 700; border-radius: 10px; padding: 8px 12px; }
+.msg-enviado { background: var(--verde-fundo); color: var(--verde); }
+.msg-espera, .msg-erro { background: var(--amarelo-fundo); color: var(--amarelo); }
+.ultimo-aviso { font-size: .95rem; }

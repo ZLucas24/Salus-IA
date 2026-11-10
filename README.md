@@ -614,6 +614,19 @@ O paciente aponta a câmera para o QR, no Wi-Fi da unidade, e vê:
 - quanto tempo já esperou e o **tempo-alvo** da cor;
 - a ordem geral das cores, com o aviso de que a posição pode mudar se chegar alguém mais grave.
 
+**Aviso de piora:** a página tem o quadro "Piorou enquanto espera?", com botões de um toque
+(falta de ar, a dor aumentou, tontura ou desmaio, sangramento, febre, vômito, outro). Não há
+texto livre. O aviso:
+
+- aparece **na hora** para o enfermeiro, em vermelho no topo das duas abas, com um bipe, e a
+  linha do paciente fica destacada na aba Fila; o botão **Vi o aviso** tira o destaque;
+- **não muda a cor nem a posição** sozinho: a equipe avalia e decide;
+- pode ser repetido depois de 2 minutos, para evitar toques acidentais em sequência;
+- vem acompanhado de um lembrete fixo: com falta de ar forte, dor no peito forte ou desmaio,
+  chamar a equipe na hora, sem esperar pelo celular.
+
+O paciente vê se a equipe já viu o aviso.
+
 **Não mostra** a pontuação, a posição exata nem nada de outros pacientes. A página se recarrega
 sozinha a cada 20 segundos e não usa JavaScript. Quando o paciente é marcado como atendido, o
 código deixa de valer.
@@ -627,8 +640,9 @@ referência do Protocolo de Manchester e ficam em `fila.tempos_alvo_minutos` no
 - A **tela do enfermeiro** escuta só em `127.0.0.1` (não aparece na rede), confere os cabeçalhos
   `Host` e `Origin`, limita o corpo a 1 MB, não carrega nada de fora (sem CDN nem fontes
   externas) e o texto digitado nunca vira HTML.
-- A **página do paciente** é outro servidor, que só lê: responde `GET /p/<código>` e o CSS, e
-  devolve 404 para qualquer outra rota e 405 para qualquer escrita. Quem está no Wi-Fi não
+- A **página do paciente** é outro servidor: responde `GET /p/<código>`, o CSS e uma única
+  escrita, `POST /p/<código>/piora` (formulário com um motivo da lista, até 200 bytes). Qualquer
+  outra rota é 404 e qualquer outra escrita é 405. Quem está no Wi-Fi não
   alcança a triagem, a fila nem os exemplos. O código do QR é aleatório (`secrets`, 32
   caracteres) e não tem nome, CPF nem número do cartão do SUS.
 
@@ -723,8 +737,7 @@ geração_banco_dados.py, salus_treinamento.db   banco de casos simulados para t
   pressão sistólica menor que a diastólica.
 - **Supabase e Hugging Face** estão nas dependências, mas ainda não são usados.
 - **Fila:** não há reclassificação. Se o paciente piorar, o enfermeiro marca como atendido e faz
-  uma nova triagem, que gera um novo número. O canal para o paciente avisar que piorou ainda não
-  existe; a página orienta procurar a recepção.
+  uma nova triagem, que gera um novo número.
 - **Voz:** a precisão do reconhecimento em português ainda não foi medida com gravações reais
   da equipe (os testes automáticos usam um transcritor falso). Teste com o microfone que será
   usado na unidade, em ambiente com barulho.

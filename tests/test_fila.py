@@ -302,3 +302,121 @@ def test_sem_pagina_do_paciente_a_fila_funciona_sem_qr():
         enf.shutdown()
         enf.server_close()
         f.fechar()
+
+
+# --- aviso de piora --------------------------------------------------------------------------
+
+from triagem.fila import AVISO_ESPERA, AVISO_INVALIDO, AVISO_OK, ESPERA_ENTRE_AVISOS_S, MOTIVOS_PIORA  # noqa: E402
+
+
+def test_aviso_de_piora_alerta_a_equipe_e_nao_muda_a_fila(fila, relogio):
+    a = fila.entrar(cls("verde", 10))
+    b = fila.entrar(cls("amarelo", 10))
+    antes = ordem(fila)
+    relogio.t += 60
+    assert fila.avisar_piora(a["token"], "falta_de_ar") == AVISO_OK
+    assert ordem(fila) == antes  # não reordena nem muda a cor: quem decide é a equipe
+    pend = fila.avisos_pendentes()
+    assert [(x["numero"], x["motivo"], x["cor"]) for x in pend] == [(a["numero"], "Falta de ar", "verde")]
+    linha = next(p for p in fila.listar() if p["numero"] == a["numero"])
+    assert linha["cor"] == "verde" and linha["avisos_piora"][0]["motivo"] == "Falta de ar"
+    assert next(p for p in fila.listar() if p["numero"] == b["numero"])["avisos_piora"] == []
+
+
+def test_aviso_repetido_espera_e_depois_pode_de_novo(fila, relogio):
+    t = fila.entrar(cls("verde"))["token"]
+    assert fila.avisar_piora(t, "dor") == AVISO_OK
+    relogio.t += ESPERA_ENTRE_AVISOS_S - 1
+    assert fila.avisar_piora(t, "dor") == AVISO_ESPERA
+    assert not fila.status_paciente(t)["aviso"]["pode_avisar_de_novo"]
+    relogio.t += 1
+    assert fila.status_paciente(t)["aviso"]["pode_avisar_de_novo"]
+    assert fila.avisar_piora(t, "febre") == AVISO_OK
+    assert len(fila.avisos_pendentes()) == 2
+
+
+@pytest.mark.parametrize("motivo", ["", "texto livre qualquer", "<script>", "FALTA_DE_AR", None])
+def test_aviso_so_aceita_motivo_da_lista(fila, motivo):
+    t = fila.entrar(cls("verde"))["token"]
+    assert fila.avisar_piora(t, motivo) == AVISO_INVALIDO
+    assert fila.avisos_pendentes() == []
+
+
+def test_aviso_de_codigo_invalido_ou_ja_atendido(fila):
+    e = fila.entrar(cls("verde"))
+    assert fila.avisar_piora("A" * 32, "dor") == AVISO_INVALIDO
+    fila.concluir(e["numero"])
+    assert fila.avisar_piora(e["token"], "dor") == AVISO_INVALIDO
+
+
+def test_marcar_visto_e_atendido_somem_dos_pendentes(fila):
+    a = fila.entrar(cls("verde"))
+    b = fila.entrar(cls("verde"))
+    fila.avisar_piora(a["token"], "dor")
+    fila.avisar_piora(b["token"], "vomito")
+    assert fila.marcar_aviso_visto(a["numero"]) and not fila.marcar_aviso_visto(a["numero"])
+    assert fila.status_paciente(a["token"])["aviso"]["visto"] is True
+    assert [x["numero"] for x in fila.avisos_pendentes()] == [b["numero"]]
+    fila.concluir(b["numero"])
+    assert fila.avisos_pendentes() == []
+    assert not fila.marcar_aviso_visto(True)
+
+
+def test_todo_motivo_tem_texto():
+    assert all(isinstance(v, str) and v for v in MOTIVOS_PIORA.values())
+
+
+def enviar_form(srv, caminho, corpo: bytes, tipo="application/x-www-form-urlencoded"):
+    con = http.client.HTTPConnection("127.0.0.1", srv.server_address[1], timeout=10)
+    con.request("POST", caminho, body=corpo, headers={"Content-Type": tipo, "Content-Length": str(len(corpo))})
+    r = con.getresponse()
+    return r.status, r.getheader("Location"), r.read()
+
+
+def test_aviso_pela_pagina_do_paciente_chega_ao_enfermeiro(servidores):
+    enf, pac, _ = servidores
+    r = json.loads(chamar(enf, "POST", "/api/fila", {"ficha": FICHA_GRAVE})[1])
+    caminho = r["url"].split(str(pac.server_address[1]), 1)[1]
+    html = chamar(pac, "GET", caminho)[1].decode("utf-8")
+    assert f'action="{caminho}/piora"' in html and 'value="falta_de_ar"' in html
+    status, destino, _ = enviar_form(pac, f"{caminho}/piora", b"motivo=falta_de_ar")
+    assert status == 303 and destino == f"{caminho}?aviso=enviado"
+    html = chamar(pac, "GET", destino)[1].decode("utf-8")
+    assert "Aviso enviado" in html and "Falta de ar" in html and "Aguardando a equipe ver" in html
+    assert f'url={caminho}"' in html  # recarregar volta para o endereço limpo, sem reenviar
+    dados = json.loads(chamar(enf, "GET", "/api/fila")[1])
+    assert dados["avisos"][0]["motivo"] == "Falta de ar" and dados["avisos"][0]["numero"] == r["numero"]
+    assert chamar(enf, "POST", "/api/fila/aviso-visto", {"numero": r["numero"]})[0] == 200
+    assert json.loads(chamar(enf, "GET", "/api/fila")[1])["avisos"] == []
+    assert "A equipe já viu" in chamar(pac, "GET", caminho)[1].decode("utf-8")
+    assert chamar(enf, "POST", "/api/fila/aviso-visto", {"numero": r["numero"]})[0] == 404
+
+
+def test_aviso_repetido_e_motivo_invalido_pela_pagina(servidores):
+    enf, pac, _ = servidores
+    r = json.loads(chamar(enf, "POST", "/api/fila", {"ficha": FICHA_GRAVE})[1])
+    caminho = r["url"].split(str(pac.server_address[1]), 1)[1]
+    assert enviar_form(pac, f"{caminho}/piora", b"motivo=texto+livre")[1].endswith("aviso=erro")
+    assert enviar_form(pac, f"{caminho}/piora", b"motivo=dor")[1].endswith("aviso=enviado")
+    assert enviar_form(pac, f"{caminho}/piora", b"motivo=dor")[1].endswith("aviso=espera")
+    html = chamar(pac, "GET", caminho)[1].decode("utf-8")
+    assert "outro aviso em alguns minutos" in html and 'name="motivo"' not in html
+
+
+def test_aviso_pela_pagina_recusa_formato_errado(servidores):
+    enf, pac, f = servidores
+    r = json.loads(chamar(enf, "POST", "/api/fila", {"ficha": FICHA_GRAVE})[1])
+    caminho = r["url"].split(str(pac.server_address[1]), 1)[1]
+    assert enviar_form(pac, f"{caminho}/piora", b'{"motivo": "dor"}', "application/json")[0] == 415
+    assert enviar_form(pac, f"{caminho}/piora", b"motivo=" + b"a" * 500)[0] == 413
+    assert enviar_form(pac, "/p/" + "A" * 32 + "/piora", b"motivo=dor")[0] == 404
+    assert enviar_form(pac, f"{caminho}/outra", b"motivo=dor")[0] == 405
+    assert f.avisos_pendentes() == []
+
+
+def test_paciente_chamado_nao_ve_o_formulario(servidores):
+    enf, pac, _ = servidores
+    r = json.loads(chamar(enf, "POST", "/api/fila", {"ficha": FICHA_GRAVE})[1])
+    chamar(enf, "POST", "/api/fila/chamar", {"numero": r["numero"]})
+    caminho = r["url"].split(str(pac.server_address[1]), 1)[1]
+    assert 'name="motivo"' not in chamar(pac, "GET", caminho)[1].decode("utf-8")

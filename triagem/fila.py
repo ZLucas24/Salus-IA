@@ -6,7 +6,9 @@ quem chegou antes. Cada paciente recebe um número de atendimento e um código a
 atendido.
 
 O paciente nunca vê a pontuação, a posição exata nem dados de outros pacientes: vê a cor,
-o motivo em linguagem simples, uma faixa de pessoas à frente e o tempo-alvo da cor.
+o motivo em linguagem simples, uma faixa de pessoas à frente e o tempo-alvo da cor. Ele pode
+avisar que piorou (um motivo de uma lista fixa); o aviso alerta a equipe, mas não muda a cor
+nem a posição.
 
 Guarda tudo num SQLite local (biblioteca padrão), para a fila sobreviver a um reinício.
 """
@@ -24,6 +26,20 @@ from triagem.sinais import Cor
 
 AGUARDANDO, CHAMADO, ATENDIDO = "aguardando", "chamado", "atendido"
 FORMATO_TOKEN = re.compile(r"^[A-Za-z0-9_-]{20,64}$")
+
+# Aviso de piora: o paciente escolhe UM motivo da lista (sem texto livre). O aviso NÃO muda
+# a cor nem a posição; só alerta a equipe, que decide o que fazer.
+MOTIVOS_PIORA = {
+    "falta_de_ar": "Falta de ar",
+    "dor": "A dor aumentou",
+    "desmaio": "Tontura ou sensação de desmaio",
+    "sangramento": "Sangramento",
+    "febre": "Febre ou calafrios",
+    "vomito": "Vômito",
+    "outro": "Outro motivo",
+}
+ESPERA_ENTRE_AVISOS_S = 120  # evita repetição acidental do mesmo paciente
+AVISO_OK, AVISO_ESPERA, AVISO_INVALIDO = "ok", "espera", "invalido"
 
 # (mínimo, máximo, texto) de pessoas à frente; máximo None = sem limite
 FAIXAS = [
@@ -89,6 +105,14 @@ class Fila:
                     chamado_em REAL,
                     atendido_em REAL
                 )""")
+            self._con.execute("""
+                CREATE TABLE IF NOT EXISTS avisos (
+                    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+                    numero    INTEGER NOT NULL REFERENCES pacientes(numero),
+                    motivo    TEXT NOT NULL,
+                    criado_em REAL NOT NULL,
+                    visto_em  REAL
+                )""")
 
     def fechar(self) -> None:
         self._con.close()
@@ -120,6 +144,42 @@ class Fila:
                 (novo, self._relogio(), numero, *de))
         return cur.rowcount == 1
 
+    def avisar_piora(self, token: str, motivo: str) -> str:
+        """Paciente avisa que piorou. Devolve AVISO_OK, AVISO_ESPERA (aviso recente) ou AVISO_INVALIDO."""
+        if motivo not in MOTIVOS_PIORA or not isinstance(token, str) or not FORMATO_TOKEN.match(token):
+            return AVISO_INVALIDO
+        agora = self._relogio()
+        with self._trava, self._con:
+            p = self._con.execute("SELECT numero, estado FROM pacientes WHERE token = ?", (token,)).fetchone()
+            if p is None or p["estado"] == ATENDIDO:
+                return AVISO_INVALIDO
+            ultimo = self._con.execute("SELECT MAX(criado_em) FROM avisos WHERE numero = ?",
+                                       (p["numero"],)).fetchone()[0]
+            if ultimo is not None and agora - ultimo < ESPERA_ENTRE_AVISOS_S:
+                return AVISO_ESPERA
+            self._con.execute("INSERT INTO avisos (numero, motivo, criado_em) VALUES (?, ?, ?)",
+                              (p["numero"], motivo, agora))
+        return AVISO_OK
+
+    def marcar_aviso_visto(self, numero: int) -> bool:
+        if not isinstance(numero, int) or isinstance(numero, bool):
+            return False
+        with self._trava, self._con:
+            cur = self._con.execute("UPDATE avisos SET visto_em = ? WHERE numero = ? AND visto_em IS NULL",
+                                    (self._relogio(), numero))
+        return cur.rowcount > 0
+
+    def avisos_pendentes(self) -> list[dict]:
+        """Avisos ainda não vistos, de quem não foi atendido, do mais antigo para o mais novo."""
+        agora = self._relogio()
+        with self._trava:
+            linhas = self._con.execute(
+                "SELECT a.id, a.numero, a.motivo, a.criado_em, p.cor FROM avisos a "
+                "JOIN pacientes p ON p.numero = a.numero "
+                "WHERE a.visto_em IS NULL AND p.estado != ? ORDER BY a.criado_em, a.id", (ATENDIDO,)).fetchall()
+        return [{"id": a["id"], "numero": a["numero"], "cor": a["cor"], "motivo": MOTIVOS_PIORA[a["motivo"]],
+                 "ha_min": int((agora - a["criado_em"]) // 60)} for a in linhas]
+
     # --- leitura ------------------------------------------------------------------------
     def _aguardando(self) -> list[sqlite3.Row]:
         return self._con.execute(
@@ -133,15 +193,19 @@ class Fila:
             chamados = self._con.execute(
                 "SELECT * FROM pacientes WHERE estado = ? ORDER BY chamado_em", (CHAMADO,)).fetchall()
             fila = self._aguardando()
+        avisos: dict[int, list[dict]] = {}
+        for a in self.avisos_pendentes():
+            avisos.setdefault(a["numero"], []).append({"motivo": a["motivo"], "ha_min": a["ha_min"]})
         linhas = []
         for posicao, p in enumerate(fila, start=1):
-            linhas.append(self._linha(p, agora, posicao))
-        return [self._linha(p, agora, None) for p in chamados] + linhas
+            linhas.append(self._linha(p, agora, posicao, avisos))
+        return [self._linha(p, agora, None, avisos) for p in chamados] + linhas
 
-    def _linha(self, p: sqlite3.Row, agora: float, posicao: int | None) -> dict:
+    def _linha(self, p: sqlite3.Row, agora: float, posicao: int | None, avisos: dict) -> dict:
         return {"numero": p["numero"], "cor": p["cor"], "pontuacao": p["pontuacao"],
                 "motivos": json.loads(p["motivos"]), "estado": p["estado"], "posicao": posicao,
-                "espera_min": int((agora - p["chegada"]) // 60), "token": p["token"]}
+                "espera_min": int((agora - p["chegada"]) // 60), "token": p["token"],
+                "avisos_piora": avisos.get(p["numero"], [])}
 
     def status_paciente(self, token: str) -> dict | None:
         """Visão do paciente. None se o código não existe ou já foi atendido."""
@@ -152,6 +216,15 @@ class Fila:
             if p is None or p["estado"] == ATENDIDO:
                 return None
             fila = self._aguardando()
+            ultimo = self._con.execute(
+                "SELECT motivo, criado_em, visto_em FROM avisos WHERE numero = ? "
+                "ORDER BY criado_em DESC, id DESC LIMIT 1", (p["numero"],)).fetchone()
+        agora = self._relogio()
+        aviso = None
+        if ultimo is not None:
+            aviso = {"motivo": MOTIVOS_PIORA[ultimo["motivo"]], "ha_min": int((agora - ultimo["criado_em"]) // 60),
+                     "visto": ultimo["visto_em"] is not None,
+                     "pode_avisar_de_novo": agora - ultimo["criado_em"] >= ESPERA_ENTRE_AVISOS_S}
         cor = Cor(p["cor"])
         a_frente = next((i for i, x in enumerate(fila) if x["numero"] == p["numero"]), None)
         return {
@@ -162,6 +235,8 @@ class Fila:
             "estado": p["estado"],
             "faixa": faixa(a_frente) if a_frente is not None else None,
             "tempo_alvo_min": carregar_regras()["fila"]["tempos_alvo_minutos"][cor.value],
-            "espera_min": int((self._relogio() - p["chegada"]) // 60),
+            "espera_min": int((agora - p["chegada"]) // 60),
             "ordem": ordem_das_cores(),
+            "aviso": aviso,
+            "motivos_piora": [{"codigo": k, "texto": v} for k, v in MOTIVOS_PIORA.items()],
         }
