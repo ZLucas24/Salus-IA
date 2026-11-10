@@ -116,6 +116,7 @@ def pagina_status(s: dict, token: str = "", mensagem: str | None = None) -> byte
 <p class="numero">{numero}</p></header>
 <section class="cartao cor cor-{s['cor']}"><p class="rotulo">Sua classificação</p>
 <p class="nome-cor">{escape(s['nome_cor'])}</p>
+{'<p class="revisado">A equipe revisou sua classificação.</p>' if s.get('revisado') else ''}
 <p class="rotulo">Por quê</p><ul class="motivos">{motivos}</ul></section>
 {situacao}
 {_secao_piora(s, token, mensagem) if s["estado"] == "aguardando" else ""}

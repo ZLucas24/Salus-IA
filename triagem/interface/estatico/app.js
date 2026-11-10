@@ -230,7 +230,7 @@ function criarPergunta(p, mudou) {
 
 /* ---------------------------------------------------------------- estado da página */
 
-const estado = { dados: null, exemplos: [], campos: {}, perguntas: {}, modulos: {}, seq: 0, timer: null };
+const estado = { dados: null, exemplos: [], campos: {}, perguntas: {}, modulos: {}, seq: 0, timer: null, saida: null, reclassificando: null };
 
 function construirCadastro() {
   const campos = CADASTRO.map(([nome, texto, tipo, obrig]) => {
@@ -422,8 +422,12 @@ function mostrarSaida(s) {
       h('span', { class: 'nota' }, String(c.pontuacao), h('small', { texto: ' / 100 dentro da cor' }))),
     h('div', { class: `medidor cor-${c.cor}`, role: 'img', 'aria-label': `Pontuação ${c.pontuacao} de 100` }, h('span', { style: `width:${c.pontuacao}%` })),
     h('p', { class: 'provisoria', texto: `Sugestão provisória. ${c.regras_validadas ? '' : 'As regras ainda não foram validadas por profissional de saúde. '}A decisão final é do profissional.` }),
-    h('div', { class: 'controles' }, h('button', { type: 'button', class: 'pilula', texto: 'Colocar na fila', onclick: colocarNaFila }),
-      h('span', { class: 'dica', texto: 'Gera o número de atendimento e o QR do paciente.' }))));
+    estado.reclassificando
+      ? h('div', { class: 'controles' },
+        h('button', { type: 'button', class: 'pilula', texto: `Atualizar classificação do ${numeroFila(estado.reclassificando.numero)}`, onclick: (ev) => atualizarReclassificacao(ev.target, false) }),
+        h('span', { class: 'dica', texto: `Cor atual na fila: ${CORES[estado.reclassificando.cor] ?? estado.reclassificando.cor}. Mantém número, QR e hora de chegada.` }))
+      : h('div', { class: 'controles' }, h('button', { type: 'button', class: 'pilula', texto: 'Colocar na fila', onclick: colocarNaFila }),
+        h('span', { class: 'dica', texto: 'Gera o número de atendimento e o QR do paciente.' }))));
 
   if (s.proxima_pergunta) {
     const p = estado.dados.perguntas.find((x) => x.id === s.proxima_pergunta);
@@ -705,6 +709,74 @@ function mostrarQR(r, nova) {
   $('#janela-qr').showModal();
 }
 
+/* reclassificação: a ficha guardada volta para a aba Triagem; o paciente mantém número e QR */
+
+function novaFicha() {
+  estado.reclassificando = null;
+  renderModo();
+  voz.pulados.clear(); voz.resultado = null;
+  preencher({}); $('#exemplo').value = ''; $('#painel').dataset.desatualizado = ''; calcular();
+}
+
+function renderModo() {
+  const caixa = $('#modo-reclass');
+  const r = estado.reclassificando;
+  caixa.hidden = !r;
+  if (!r) { caixa.replaceChildren(); return; }
+  caixa.replaceChildren(
+    h('span', {}, h('strong', { texto: `Reclassificando o paciente ${numeroFila(r.numero)}` }),
+      ` · cor atual na fila: ${CORES[r.cor] ?? r.cor}. Ajuste a ficha e clique em "Atualizar classificação".`),
+    h('button', { type: 'button', class: 'pilula secundaria', texto: 'Cancelar', onclick: novaFicha }));
+}
+
+async function iniciarReclassificacao(numero) {
+  const { status, corpo } = await postar('/api/fila/ficha', { numero });
+  if (status !== 200) { carregarFila(); return; }
+  if (!corpo.ficha) {
+    window.alert('Este paciente entrou na fila antes da reclassificação existir: a ficha não foi guardada. Faça uma nova triagem.');
+    return;
+  }
+  estado.reclassificando = { numero, cor: corpo.cor };
+  voz.pulados.clear(); voz.resultado = null;
+  $('#exemplo').value = '';
+  if (corpo.extrator && [...$('#extrator').options].some((o) => o.value === corpo.extrator)) { $('#extrator').value = corpo.extrator; textoExtrator(); }
+  preencher(corpo.ficha);
+  mostrarTela('triagem');
+  renderModo();
+  window.scrollTo({ top: 0 });
+  calcular();
+}
+
+async function atualizarReclassificacao(botao, confirmar) {
+  const r = estado.reclassificando;
+  botao.disabled = true;
+  try {
+    const { status, corpo } = await postar('/api/fila/reclassificar',
+      { numero: r.numero, ficha: lerFicha(), extrator: $('#extrator').value, confirmar_reducao: confirmar });
+    if (status === 409) {
+      const ok = window.confirm(`A cor do paciente ${numeroFila(r.numero)} baixaria de ${CORES[corpo.cor_antes]} para ${CORES[corpo.cor_depois]}.\n\nConfirma que o paciente melhorou e a prioridade deve baixar?`);
+      if (ok) await atualizarReclassificacao(botao, true);
+      return;
+    }
+    if (status !== 200) { mostrarErros(corpo.erros || ['erro desconhecido']); return; }
+    $('#titulo-qr').textContent = 'Classificação atualizada';
+    $('#qr-numero').textContent = numeroFila(corpo.numero);
+    $('#qr-imagem').hidden = true;
+    $('#qr-texto').textContent = corpo.cor_antes === corpo.cor_depois
+      ? `Cor mantida: ${CORES[corpo.cor_depois]} (pontuação ${corpo.pontuacao_antes} → ${corpo.pontuacao_depois}).`
+      : `Cor: ${CORES[corpo.cor_antes]} → ${CORES[corpo.cor_depois]}. O QR do paciente já mostra a nova classificação.`;
+    $('#qr-url').textContent = '';
+    $('#qr-nova').hidden = true;
+    $('#janela-qr').showModal();
+    novaFicha();
+    mostrarTela('fila');
+  } catch (e) {
+    mostrarErros([`Não foi possível falar com o servidor local (${e.message}).`]);
+  } finally {
+    botao.disabled = false;
+  }
+}
+
 function mostrarTela(qual) {
   const fila = qual === 'fila';
   $('#tela-triagem').hidden = fila;
@@ -755,6 +827,7 @@ function linhaFila(p) {
   const acoes = [];
   if (p.avisos_piora.length) acoes.push(h('button', { type: 'button', class: 'pilula', texto: 'Vi o aviso', onclick: () => acaoFila('/api/fila/aviso-visto', p.numero) }));
   if (p.estado === 'aguardando') acoes.push(h('button', { type: 'button', class: 'pilula', texto: 'Chamar', onclick: () => acaoFila('/api/fila/chamar', p.numero) }));
+  acoes.push(h('button', { type: 'button', class: 'pilula secundaria', texto: 'Reclassificar', onclick: () => iniciarReclassificacao(p.numero) }));
   acoes.push(h('button', { type: 'button', class: 'pilula secundaria', texto: 'Atendido', onclick: () => acaoFila('/api/fila/concluir', p.numero) }));
   acoes.push(h('button', { type: 'button', class: 'pilula secundaria', texto: 'Ver QR', onclick: () => acaoFila('/api/fila/qr', p.numero) }));
   return h('tr', { class: [p.estado === 'chamado' ? 'chamado' : '', p.avisos_piora.length ? 'piorou' : ''].join(' ').trim() },
@@ -764,6 +837,7 @@ function linhaFila(p) {
     h('td', { class: 'num', texto: String(p.pontuacao) }),
     h('td', { class: 'col-motivos' },
       p.avisos_piora.map((a) => h('p', { class: 'piorou-texto', texto: `Piorou: ${a.motivo} · ${a.ha_min ? `há ${a.ha_min} min` : 'agora'}` })),
+      p.reclassificado_ha_min !== null ? h('p', { class: 'dica', texto: `Reclassificado ${p.reclassificado_ha_min ? `há ${p.reclassificado_ha_min} min` : 'agora'}` }) : null,
       h('ul', { class: 'motivos-fila' }, p.motivos.map((m) => h('li', { texto: m })))),
     h('td', { texto: `${p.espera_min} min` }),
     h('td', { class: 'col-acoes' }, h('div', { class: 'acoes' }, acoes)));
@@ -825,7 +899,7 @@ async function iniciar() {
     preencher(estado.exemplos[Number(ev.target.value)].ficha);
     calcular();
   });
-  $('#limpar').addEventListener('click', () => { voz.pulados.clear(); voz.resultado = null; preencher({}); $('#exemplo').value = ''; $('#painel').dataset.desatualizado = ''; calcular(); });
+  $('#limpar').addEventListener('click', novaFicha);
   $('#analisar').addEventListener('click', () => { clearTimeout(estado.timer); calcular(); });
   $('#extrator').addEventListener('change', () => { textoExtrator(); agendar(); });
   $('#auto').addEventListener('change', agendar);
@@ -835,8 +909,7 @@ async function iniciar() {
   $('#qr-fechar').addEventListener('click', () => $('#janela-qr').close());
   $('#qr-nova').addEventListener('click', () => {
     $('#janela-qr').close();
-    voz.pulados.clear(); voz.resultado = null;
-    preencher({}); $('#exemplo').value = ''; $('#painel').dataset.desatualizado = ''; calcular();
+    novaFicha();
     window.scrollTo({ top: 0 });
   });
   carregarFila();

@@ -599,9 +599,21 @@ O navegador pede permissão para usar o microfone na primeira gravação.
 ### Aba Fila
 
 Lista os pacientes chamados e, depois, os que aguardam, na ordem **cor → pontuação → chegada**.
-Mostra posição, número, cor, pontuação, motivo e espera, com os botões **Chamar**, **Atendido** e
-**Ver QR**. Atualiza sozinha a cada 5 segundos. A fila fica salva em SQLite
-([triagem/fila.py](triagem/fila.py)) e sobrevive a um reinício.
+Mostra posição, número, cor, pontuação, motivo e espera, com os botões **Chamar**,
+**Reclassificar**, **Atendido** e **Ver QR**. Atualiza sozinha a cada 5 segundos. A fila fica
+salva em SQLite ([triagem/fila.py](triagem/fila.py)) e sobrevive a um reinício. A ficha de cada
+paciente também fica guardada nesse arquivo, só nesta máquina, para a reclassificação.
+
+**Reclassificar** leva a ficha guardada de volta para a aba Triagem, com um aviso azul no topo.
+O enfermeiro ajusta as respostas (digitando ou por voz) e clica em **Atualizar classificação**:
+
+- o paciente **mantém o número, o QR e a hora de chegada**;
+- a cor é recalculada no servidor, como na entrada;
+- se a cor **subir** ou ficar igual, atualiza direto; se **baixar** (paciente melhorou), o
+  servidor exige confirmação explícita do enfermeiro;
+- os avisos de piora pendentes daquele paciente são marcados como vistos;
+- o QR passa a mostrar a nova cor e "A equipe revisou sua classificação";
+- cada mudança fica num histórico (tabela `reclassificacoes`).
 
 ### Página do paciente (QR)
 
@@ -736,8 +748,6 @@ geração_banco_dados.py, salus_treinamento.db   banco de casos simulados para t
   para ajustar pesos; o `triagem.ajustar` mostra isso (correlação perto de zero). Três casos têm
   pressão sistólica menor que a diastólica.
 - **Supabase e Hugging Face** estão nas dependências, mas ainda não são usados.
-- **Fila:** não há reclassificação. Se o paciente piorar, o enfermeiro marca como atendido e faz
-  uma nova triagem, que gera um novo número.
 - **Voz:** a precisão do reconhecimento em português ainda não foi medida com gravações reais
   da equipe (os testes automáticos usam um transcritor falso). Teste com o microfone que será
   usado na unidade, em ambiente com barulho.

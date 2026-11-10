@@ -70,3 +70,4 @@ header { text-align: center; }
 .msg-enviado { background: var(--verde-fundo); color: var(--verde); }
 .msg-espera, .msg-erro { background: var(--amarelo-fundo); color: var(--amarelo); }
 .ultimo-aviso { font-size: .95rem; }
+.revisado { font-weight: 700; font-size: .95rem; }

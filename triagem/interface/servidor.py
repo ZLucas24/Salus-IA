@@ -14,6 +14,9 @@ Escuta apenas em 127.0.0.1 e serve:
   POST /api/fila/chamar       {"numero": 7}
   POST /api/fila/concluir     {"numero": 7} (o código do QR deixa de valer)
   POST /api/fila/aviso-visto  {"numero": 7} (o enfermeiro viu o aviso de piora do paciente)
+  POST /api/fila/ficha        {"numero": 7} -> a ficha guardada, para reclassificar
+  POST /api/fila/reclassificar {"numero": 7, "ficha": {...}, "extrator": "mock", "confirmar_reducao": false}
+                              mesmo número, QR e chegada; cor mais baixa exige confirmar_reducao (senão 409)
   POST /api/voz?pergunta=Q09&parte=resposta   corpo = áudio gravado (audio/webm, audio/wav...)
                               -> {"transcricao", "valor", "entendido", "motivo"}
                               O áudio é transcrito na memória e descartado; nada é gravado.
@@ -135,9 +138,25 @@ def colocar_na_fila(fila: Fila, base_url: str | None, ficha, nome_extrator: str)
     status, corpo = calcular(ficha, nome_extrator)
     if status != 200:
         return status, corpo
-    entrada = fila.entrar(Classificacao.model_validate(corpo["saida"]["classificacao"]))
+    entrada = fila.entrar(Classificacao.model_validate(corpo["saida"]["classificacao"]), ficha, nome_extrator)
     url = url_paciente(base_url, entrada["token"])
     return 200, {"numero": entrada["numero"], "url": url, "qr": qr_svg(url) if url else None}
+
+
+def reclassificar(fila: Fila, numero, ficha, nome_extrator: str, permitir_reducao: bool) -> tuple[int, dict]:
+    """Processa a ficha de novo, aqui no servidor, e troca a classificação de quem já está na fila."""
+    if fila.ficha(numero) is None:
+        return 404, {"erros": ["paciente não está na fila"]}
+    status, corpo = calcular(ficha, nome_extrator)
+    if status != 200:
+        return status, corpo
+    r = fila.reclassificar(numero, Classificacao.model_validate(corpo["saida"]["classificacao"]),
+                           ficha, nome_extrator, permitir_reducao)
+    if r["ok"]:
+        return 200, r
+    if r["motivo"] == "precisa_confirmar":
+        return 409, {**r, "erros": [f"a cor baixaria de {r['cor_antes']} para {r['cor_depois']}; confirme"]}
+    return 404, {"erros": ["paciente não está na fila"]}
 
 
 class Manipulador(BaseHTTPRequestHandler):
@@ -295,6 +314,17 @@ class Manipulador(BaseHTTPRequestHandler):
             return 200, {"ok": True}
         return 404, {"erros": ["paciente não está na fila"]}
 
+    def _fila_ficha(self, corpo: dict) -> tuple[int, dict]:
+        f = self.server.fila.ficha(self._numero(corpo))
+        return (200, f) if f is not None else (404, {"erros": ["paciente não está na fila"]})
+
+    def _fila_reclassificar(self, corpo: dict) -> tuple[int, dict]:
+        par = self._ficha_e_extrator(corpo)
+        if par is None:
+            return 400, {"erros": ['JSON inválido; esperado {"numero": 7, "ficha": {...}}']}
+        return reclassificar(self.server.fila, self._numero(corpo), *par,
+                             permitir_reducao=corpo.get("confirmar_reducao") is True)
+
     def _fila_aviso_visto(self, corpo: dict) -> tuple[int, dict]:
         if self.server.fila.marcar_aviso_visto(self._numero(corpo)):
             return 200, {"ok": True}
@@ -303,7 +333,8 @@ class Manipulador(BaseHTTPRequestHandler):
 
 ROTAS_POST = {"/api/triagem": "_triagem", "/api/fila": "_fila_entrar", "/api/fila/qr": "_fila_qr",
               "/api/fila/chamar": "_fila_chamar", "/api/fila/concluir": "_fila_concluir",
-              "/api/fila/aviso-visto": "_fila_aviso_visto"}
+              "/api/fila/aviso-visto": "_fila_aviso_visto", "/api/fila/ficha": "_fila_ficha",
+              "/api/fila/reclassificar": "_fila_reclassificar"}
 
 
 class ServidorLocal(ThreadingHTTPServer):

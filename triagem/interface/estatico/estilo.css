@@ -245,3 +245,7 @@ dialog::backdrop { background: rgba(10, 20, 18, .55); }
 }
 
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } .carregando { transition: none; } }
+
+/* modo reclassificação */
+.modo-reclass { max-width: 1280px; margin: 12px auto 0; padding: 10px 16px; display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; justify-content: space-between; background: var(--azul-fundo); border: 2px solid var(--azul); border-radius: 14px; width: calc(100% - 32px); }
+.modo-reclass[hidden] { display: none; }
