@@ -26,3 +26,8 @@ Thumbs.db
 
 # Fila local da interface (dados de pacientes, mesmo que simulados)
 fila.db
+
+# Contas de enfermeiro e base de treino (locais; nunca no Git)
+usuarios.db
+treino.db
+treino*.jsonl

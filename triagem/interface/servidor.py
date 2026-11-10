@@ -21,6 +21,12 @@ Escuta apenas em 127.0.0.1 e serve:
                               -> {"transcricao", "valor", "entendido", "motivo"}
                               O áudio é transcrito na memória e descartado; nada é gravado.
 
+  GET  /login, POST /login, POST /logout, GET /api/eu   login do enfermeiro
+
+Tudo, menos /login e o CSS, exige sessão de enfermeiro (cookie HttpOnly, SameSite=Strict);
+as contas ficam em `usuarios.db` (`python -m triagem.usuarios`). Sem sessão, a página vai
+para /login e a API responde 401. Cada ação na fila registra quem a fez.
+
 A página do paciente (aberta pelo QR) é outro servidor, em `paciente.py`.
 
 Defesas simples, porque o conteúdo é de saúde (mesmo que simulado): só loopback,
@@ -34,15 +40,19 @@ import re
 import sys
 import threading
 from http import HTTPStatus
+from http.cookies import SimpleCookie
+from urllib.parse import parse_qs
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from triagem.entrevista import FichaInvalida, processar_ficha
 from triagem.fila import Fila
-from triagem.extracao import NOME_PADRAO, NOMES_EXTRATORES, criar_extrator
+from triagem.extracao import NOME_PADRAO, NOMES_EXTRATORES, Extracao, Extrator, criar_extrator
 from triagem.questionario import carregar_questionario
 from triagem.regras import carregar_regras
 from triagem.schema import Classificacao
+from triagem.treino import BaseTreino
+from triagem.usuarios import SESSAO_MAX_S, Usuarios
 from triagem.voz import ErroVoz, Transcritor, TranscritorWhisper, interpretar_fala, whisper_instalado
 
 log = logging.getLogger("triagem.interface")
@@ -56,11 +66,15 @@ TIPOS = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=u
 CABECALHOS_SEGURANCA = {
     "Cache-Control": "no-store",
     "X-Content-Type-Options": "nosniff",
-    "Referrer-Policy": "no-referrer",
+    # same-origin (e não no-referrer): com no-referrer o navegador manda "Origin: null" nos
+    # formulários (login/sair), e a checagem de origem os recusaria
+    "Referrer-Policy": "same-origin",
     "Content-Security-Policy": ("default-src 'none'; script-src 'self'; style-src 'self'; "
                                 "connect-src 'self'; img-src 'self' data:; base-uri 'none'; "
-                                "form-action 'none'; frame-ancestors 'none'"),
+                                "form-action 'self'; frame-ancestors 'none'"),
 }
+COOKIE = "salus_sessao"
+LIVRES = {"/login", "/estatico/estilo.css"}   # o resto exige sessão
 NOME_ARQUIVO = re.compile(r"^[a-z0-9_.-]+$")
 
 
@@ -109,15 +123,35 @@ def listar_exemplos() -> list[dict]:
     return exemplos
 
 
+class ExtratorGravador(Extrator):
+    """Repassa ao extrator real e guarda a leitura CRUA do relato (antes da mescla com as
+    respostas diretas), que é o que interessa à base de treino."""
+
+    def __init__(self, real: Extrator):
+        self.real, self.nome, self.extracao = real, real.nome, None
+
+    def extrair(self, relato: str) -> Extracao:
+        self.extracao = self.real.extrair(relato)
+        return self.extracao
+
+
+def processar(ficha, nome_extrator: str) -> tuple[int, dict, dict | None]:
+    """Roda o fluxo real. Devolve (status HTTP, corpo, leitura crua do relato ou None)."""
+    if nome_extrator not in NOMES_EXTRATORES:
+        return 400, {"erros": [f"extrator desconhecido: {nome_extrator!r}"]}, None
+    gravador = ExtratorGravador(criar_extrator(nome_extrator))
+    try:
+        saida = processar_ficha(ficha, gravador)
+    except FichaInvalida as e:
+        return 422, {"erros": e.erros}, None
+    crua = gravador.extracao.model_dump(mode="json") if gravador.extracao else None
+    return 200, {"saida": saida.model_dump(mode="json")}, crua
+
+
 def calcular(ficha, nome_extrator: str) -> tuple[int, dict]:
     """Roda o fluxo real. Devolve (status HTTP, corpo)."""
-    if nome_extrator not in NOMES_EXTRATORES:
-        return 400, {"erros": [f"extrator desconhecido: {nome_extrator!r}"]}
-    try:
-        saida = processar_ficha(ficha, criar_extrator(nome_extrator))
-    except FichaInvalida as e:
-        return 422, {"erros": e.erros}
-    return 200, {"saida": saida.model_dump(mode="json")}
+    status, corpo, _ = processar(ficha, nome_extrator)
+    return status, corpo
 
 
 def qr_svg(url: str) -> str | None:
@@ -133,28 +167,45 @@ def url_paciente(base: str | None, token: str) -> str | None:
     return f"{base}/p/{token}" if base else None
 
 
-def colocar_na_fila(fila: Fila, base_url: str | None, ficha, nome_extrator: str) -> tuple[int, dict]:
+def guardar_para_treino(treino: BaseTreino | None, caso_id: str | None, ficha, saida: dict,
+                        extrator: str, crua: dict | None) -> None:
+    """Grava o caso anônimo na base de treino. Uma falha aqui nunca atrapalha a triagem."""
+    if treino is None or not caso_id:
+        return
+    try:
+        treino.registrar(caso_id, ficha, saida, extrator, crua)
+    except Exception:
+        log.exception("não foi possível gravar o caso na base de treino")
+
+
+def colocar_na_fila(fila: Fila, base_url: str | None, ficha, nome_extrator: str,
+                    por: str | None = None, treino: BaseTreino | None = None) -> tuple[int, dict]:
     """Processa a ficha aqui mesmo (a cor nunca vem do navegador) e põe o paciente na fila."""
-    status, corpo = calcular(ficha, nome_extrator)
+    status, corpo, crua = processar(ficha, nome_extrator)
     if status != 200:
         return status, corpo
-    entrada = fila.entrar(Classificacao.model_validate(corpo["saida"]["classificacao"]), ficha, nome_extrator)
+    entrada = fila.entrar(Classificacao.model_validate(corpo["saida"]["classificacao"]), ficha, nome_extrator,
+                          por=por)
+    guardar_para_treino(treino, entrada["caso_id"], ficha, corpo["saida"], nome_extrator, crua)
     url = url_paciente(base_url, entrada["token"])
     return 200, {"numero": entrada["numero"], "url": url, "qr": qr_svg(url) if url else None}
 
 
-def reclassificar(fila: Fila, numero, ficha, nome_extrator: str, permitir_reducao: bool) -> tuple[int, dict]:
+def reclassificar(fila: Fila, numero, ficha, nome_extrator: str, permitir_reducao: bool,
+                  por: str | None = None, treino: BaseTreino | None = None) -> tuple[int, dict]:
     """Processa a ficha de novo, aqui no servidor, e troca a classificação de quem já está na fila."""
     if fila.ficha(numero) is None:
         return 404, {"erros": ["paciente não está na fila"]}
-    status, corpo = calcular(ficha, nome_extrator)
+    status, corpo, crua = processar(ficha, nome_extrator)
     if status != 200:
         return status, corpo
     r = fila.reclassificar(numero, Classificacao.model_validate(corpo["saida"]["classificacao"]),
-                           ficha, nome_extrator, permitir_reducao)
+                           ficha, nome_extrator, permitir_reducao, por=por)
     if r["ok"]:
+        guardar_para_treino(treino, r.pop("caso_id"), ficha, corpo["saida"], nome_extrator, crua)
         return 200, r
     if r["motivo"] == "precisa_confirmar":
+        r.pop("caso_id", None)
         return 409, {**r, "erros": [f"a cor baixaria de {r['cor_antes']} para {r['cor_depois']}; confirme"]}
     return 404, {"erros": ["paciente não está na fila"]}
 
@@ -167,14 +218,39 @@ class Manipulador(BaseHTTPRequestHandler):
         log.debug(formato, *args)
 
     # --- respostas -----------------------------------------------------------------
-    def _enviar(self, status: int, corpo: bytes, tipo: str) -> None:
+    def _enviar(self, status: int, corpo: bytes, tipo: str, extras: dict | None = None) -> None:
         self.send_response(status)
         self.send_header("Content-Type", tipo)
         self.send_header("Content-Length", str(len(corpo)))
-        for chave, valor in CABECALHOS_SEGURANCA.items():
+        for chave, valor in {**CABECALHOS_SEGURANCA, **(extras or {})}.items():
             self.send_header(chave, valor)
         self.end_headers()
         self.wfile.write(corpo)
+
+    def _redirecionar(self, destino: str, cookie: str | None = None) -> None:
+        extras = {"Location": destino}
+        if cookie is not None:
+            extras["Set-Cookie"] = cookie
+        self._enviar(HTTPStatus.SEE_OTHER.value, b"", "text/plain; charset=utf-8", extras)
+
+    # --- sessão ---------------------------------------------------------------------------
+    def _codigo_sessao(self) -> str | None:
+        try:
+            biscoito = SimpleCookie(self.headers.get("Cookie", ""))
+        except Exception:
+            return None
+        return biscoito[COOKIE].value if COOKIE in biscoito else None
+
+    def _quem(self) -> dict | None:
+        """Enfermeiro logado. Sem `usuarios` no servidor (só nos testes), o login fica desligado."""
+        if self.server.usuarios is None:
+            return {"login": None, "nome": None}
+        return self.server.usuarios.sessao(self._codigo_sessao())
+
+    @property
+    def _por(self) -> str | None:
+        quem = self._quem()
+        return quem["login"] if quem else None
 
     def _json(self, status: int, dados) -> None:
         corpo = json.dumps(dados, ensure_ascii=False).encode("utf-8")
@@ -197,7 +273,18 @@ class Manipulador(BaseHTTPRequestHandler):
     def do_GET(self):
         if not self._origem_confiavel(False):
             return self._erro(HTTPStatus.FORBIDDEN, "host não permitido")
-        caminho = self.path.split("?", 1)[0]
+        caminho, _, consulta = self.path.partition("?")
+        if caminho == "/login":
+            if self.server.usuarios is None or self._quem():
+                return self._redirecionar("/")
+            return self._enviar(200, pagina_login("erro" in parse_qs(consulta)), "text/html; charset=utf-8")
+        quem = self._quem()
+        if quem is None and caminho not in LIVRES:
+            if caminho in ("/", "/index.html"):
+                return self._redirecionar("/login")
+            return self._erro(HTTPStatus.UNAUTHORIZED, "faça login")
+        if caminho == "/api/eu":
+            return self._json(200, quem)
         if caminho in ("/", "/index.html"):
             return self._arquivo("index.html")
         if caminho.startswith("/estatico/"):
@@ -234,6 +321,14 @@ class Manipulador(BaseHTTPRequestHandler):
         corpo_bruto = self._ler_corpo(LIMITE_AUDIO if caminho == "/api/voz" else LIMITE_CORPO)
         if not self._origem_confiavel(True):
             return self._erro(HTTPStatus.FORBIDDEN, "origem não permitida")
+        if caminho == "/login":
+            return self._login(corpo_bruto)
+        if caminho == "/logout":
+            if self.server.usuarios is not None:
+                self.server.usuarios.sair(self._codigo_sessao())
+            return self._redirecionar("/login", f"{COOKIE}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0")
+        if self._quem() is None:
+            return self._erro(HTTPStatus.UNAUTHORIZED, "faça login")
         if caminho == "/api/voz":
             return self._voz(corpo_bruto, consulta)
         if caminho not in ROTAS_POST:
@@ -255,6 +350,20 @@ class Manipulador(BaseHTTPRequestHandler):
             log.exception("erro interno em %s", caminho)
             return self._erro(HTTPStatus.INTERNAL_SERVER_ERROR, "erro interno; veja o terminal")
         self._json(status, resposta)
+
+    def _login(self, corpo: bytes | None) -> None:
+        if self.server.usuarios is None:
+            return self._redirecionar("/")
+        if corpo is None or not self.headers.get("Content-Type", "").startswith("application/x-www-form-urlencoded"):
+            return self._redirecionar("/login?erro=1")
+        campos = parse_qs(corpo.decode("utf-8", "replace"))
+        login = campos.get("login", [""])[0]
+        sessao = self.server.usuarios.entrar(login, campos.get("senha", [""])[0])
+        if sessao is None:
+            log.warning("login recusado: %s", login[:40])
+            return self._redirecionar("/login?erro=1")
+        log.info("login: %s", login.strip().lower())
+        self._redirecionar("/", f"{COOKIE}={sessao}; HttpOnly; SameSite=Strict; Path=/; Max-Age={SESSAO_MAX_S}")
 
     def _voz(self, audio: bytes | None, consulta: str) -> None:
         from urllib.parse import parse_qs
@@ -294,7 +403,8 @@ class Manipulador(BaseHTTPRequestHandler):
         par = self._ficha_e_extrator(corpo)
         if par is None:
             return 400, {"erros": ['JSON inválido; esperado {"ficha": {...}}']}
-        return colocar_na_fila(self.server.fila, self.server.url_paciente, *par)
+        return colocar_na_fila(self.server.fila, self.server.url_paciente, *par, por=self._por,
+                               treino=self.server.treino)
 
     def _fila_qr(self, corpo: dict) -> tuple[int, dict]:
         n = self._numero(corpo)
@@ -305,12 +415,12 @@ class Manipulador(BaseHTTPRequestHandler):
         return 200, {"numero": n, "url": url, "qr": qr_svg(url) if url else None}
 
     def _fila_chamar(self, corpo: dict) -> tuple[int, dict]:
-        if self.server.fila.chamar(self._numero(corpo)):
+        if self.server.fila.chamar(self._numero(corpo), por=self._por):
             return 200, {"ok": True}
         return 404, {"erros": ["paciente não está aguardando"]}
 
     def _fila_concluir(self, corpo: dict) -> tuple[int, dict]:
-        if self.server.fila.concluir(self._numero(corpo)):
+        if self.server.fila.concluir(self._numero(corpo), por=self._por):
             return 200, {"ok": True}
         return 404, {"erros": ["paciente não está na fila"]}
 
@@ -323,10 +433,11 @@ class Manipulador(BaseHTTPRequestHandler):
         if par is None:
             return 400, {"erros": ['JSON inválido; esperado {"numero": 7, "ficha": {...}}']}
         return reclassificar(self.server.fila, self._numero(corpo), *par,
-                             permitir_reducao=corpo.get("confirmar_reducao") is True)
+                             permitir_reducao=corpo.get("confirmar_reducao") is True, por=self._por,
+                             treino=self.server.treino)
 
     def _fila_aviso_visto(self, corpo: dict) -> tuple[int, dict]:
-        if self.server.fila.marcar_aviso_visto(self._numero(corpo)):
+        if self.server.fila.marcar_aviso_visto(self._numero(corpo), por=self._por):
             return 200, {"ok": True}
         return 404, {"erros": ["não há aviso pendente para este paciente"]}
 
@@ -344,18 +455,50 @@ class ServidorLocal(ThreadingHTTPServer):
 
 
 def criar_servidor(porta: int = 0, fila: Fila | None = None, url_paciente: str | None = None,
-                   transcritor: Transcritor | None = None) -> ServidorLocal:
+                   transcritor: Transcritor | None = None, usuarios: Usuarios | None = None,
+                   treino: BaseTreino | None = None) -> ServidorLocal:
     """Cria o servidor em loopback (porta 0 = qualquer porta livre).
 
     `url_paciente` é o endereço da página do paciente no Wi-Fi (ex.: http://192.168.0.10:8766);
-    sem ele, a fila funciona, mas não gera QR. Sem `transcritor`, a voz fica desligada."""
+    sem ele, a fila funciona, mas não gera QR. Sem `transcritor`, a voz fica desligada.
+    Sem `usuarios`, o login fica DESLIGADO: isso só é usado nos testes; o comando sempre liga."""
     servidor = ServidorLocal(("127.0.0.1", porta), Manipulador)
     p = servidor.server_address[1]
     servidor.hosts_permitidos = {f"127.0.0.1:{p}", f"localhost:{p}"}
     servidor.fila = fila if fila is not None else Fila()
     servidor.url_paciente = url_paciente
     servidor.transcritor = transcritor
+    servidor.usuarios = usuarios
+    servidor.treino = treino
     return servidor
+
+
+def pagina_login(erro: bool) -> bytes:
+    aviso = ('<p class="alerta atencao" role="alert">Login ou senha incorretos (ou conta bloqueada '
+             "por alguns minutos depois de várias tentativas).</p>") if erro else ""
+    return f"""<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Entrar · SalUS.ia</title>
+<link rel="stylesheet" href="/estatico/estilo.css">
+</head>
+<body>
+<main class="tela-login">
+<form class="cartao" method="post" action="/login">
+<div class="marca"><span class="logo" aria-hidden="true">+</span>
+<div><h1>Sal<span>US</span>.ia</h1><p>Tela do enfermeiro</p></div></div>
+{aviso}
+<label class="campo">Login<input name="login" autocomplete="username" required autofocus></label>
+<label class="campo">Senha<input name="senha" type="password" autocomplete="current-password" required></label>
+<button class="pilula" type="submit">Entrar</button>
+<p class="dica">Contas: <code>python -m triagem.usuarios criar &lt;login&gt; --nome "Nome"</code></p>
+</form>
+</main>
+</body>
+</html>
+""".encode("utf-8")
 
 
 def ip_na_rede() -> str:
@@ -397,13 +540,24 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--sem-paciente", action="store_true",
                         help="não abre a página do paciente na rede (a fila funciona sem QR)")
     parser.add_argument("--sem-voz", action="store_true", help="desliga a entrevista por voz")
+    parser.add_argument("--usuarios", default="usuarios.db", help="contas de enfermeiro (padrão: usuarios.db)")
+    parser.add_argument("--treino", default="treino.db",
+                        help="base de treino do extrator, anonimizada (padrão: treino.db)")
+    parser.add_argument("--sem-treino", action="store_true", help="não grava casos na base de treino")
     args = parser.parse_args(argv)
     configurar_io()
     carregar_env()
 
     from triagem.interface.paciente import criar_servidor_paciente
 
+    usuarios = Usuarios(args.usuarios)
+    if not usuarios.existe_algum_ativo():
+        log.error("nenhuma conta de enfermeiro. Crie a primeira com:\n"
+                  "  python -m triagem.usuarios criar <login> --nome \"Seu Nome\"")
+        usuarios.fechar()
+        return 2
     fila = Fila(args.fila)
+    treino = None if args.sem_treino else BaseTreino(args.treino)
     paciente, base = None, None
     try:
         if not args.sem_paciente:
@@ -414,12 +568,15 @@ def main(argv: list[str] | None = None) -> int:
             transcritor = TranscritorWhisper()
         elif not args.sem_voz:
             log.info("voz desligada: faster-whisper não instalado (pip install -r requirements-voz.txt)")
-        servidor = criar_servidor(args.porta, fila, base, transcritor)
+        servidor = criar_servidor(args.porta, fila, base, transcritor, usuarios, treino)
     except OSError as e:
         log.error("não foi possível abrir a porta: %s", e)
         if paciente:
             paciente.server_close()
         fila.fechar()
+        usuarios.fechar()
+        if treino:
+            treino.fechar()
         return 2
     url = f"http://127.0.0.1:{servidor.server_address[1]}/"
     log.info("interface do enfermeiro em %s (só nesta máquina; Ctrl+C para encerrar)", url)
@@ -429,6 +586,9 @@ def main(argv: list[str] | None = None) -> int:
     if transcritor is not None:
         # carrega o modelo em segundo plano para a primeira gravação não demorar
         threading.Thread(target=_precarregar, args=(transcritor,), daemon=True).start()
+    if treino:
+        log.info("base de treino ligada em %s (anonimizada; trate como dado sensível; --sem-treino desliga)",
+                 args.treino)
     if args.abrir:
         webbrowser.open(url)
     try:
@@ -441,6 +601,9 @@ def main(argv: list[str] | None = None) -> int:
             paciente.shutdown()
             paciente.server_close()
         fila.fechar()
+        usuarios.fechar()
+        if treino:
+            treino.fechar()
     return 0
 
 

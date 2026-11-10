@@ -109,7 +109,12 @@ Rodar uma ficha de exemplo (o JSON sai no terminal):
 python -m triagem exemplos/ficha_exemplo.json
 ```
 
-Abrir a interface web no navegador:
+Abrir a interface web no navegador. Na primeira vez, crie uma conta de enfermeiro (a senha é
+pedida no terminal, sem aparecer):
+
+```bash
+python -m triagem.usuarios criar ana --nome "Ana Souza"
+```
 
 ```bash
 python -m triagem.interface --abrir
@@ -490,7 +495,10 @@ O código **não confia no modelo**. Toda resposta passa por estes filtros:
 | Comando | O que faz |
 |---|---|
 | `python -m triagem ficha.json` | processa a ficha e imprime o JSON de saída |
-| `python -m triagem.interface --abrir` | abre a interface web local |
+| `python -m triagem.interface --abrir` | abre a interface web local (pede login) |
+| `python -m triagem.usuarios criar <login> --nome "Nome"` | cria conta de enfermeiro; também `listar`, `desativar`, `senha` |
+| `python -m triagem.treino resumo` | quantos casos há na base de treino do extrator |
+| `python -m triagem.treino exportar --particao treino --saida treino.jsonl` | exporta casos anonimizados (JSONL) |
 | `python -m triagem.relato "dor no peito há 2 horas"` | só extrai um relato: queixa, sinais e duração |
 | `python -m triagem.avaliar --alvo mock --alvo ollama:llama3.1:8b` | compara extratores com o gabarito simulado |
 | `python -m triagem.roteiro` | gera de novo o [roteiro de entrevista](docs/roteiro_entrevista.md) |
@@ -520,8 +528,49 @@ Opções do `python -m triagem`:
 ## Interface web
 
 ```bash
-python -m triagem.interface --abrir     # abre http://127.0.0.1:8765/
+python -m triagem.usuarios criar ana --nome "Ana Souza"   # só na primeira vez
+python -m triagem.interface --abrir                        # abre http://127.0.0.1:8765/
 ```
+
+### Login do enfermeiro
+
+A tela do enfermeiro pede **login e senha**. Sem nenhuma conta criada, a interface nem sobe e
+mostra o comando para criar a primeira.
+
+- Contas em `usuarios.db` (fora do Git), com senha guardada como **scrypt** com sal, nunca em
+  texto. Comandos: `python -m triagem.usuarios criar|listar|desativar|senha`.
+- A sessão fica num cookie `HttpOnly` e `SameSite=Strict` e dura no máximo **12 horas** (um
+  plantão). Sem uso por **1 hora**, pede a senha de novo. Reiniciar a interface desloga todos.
+- Depois de **5 senhas erradas** seguidas, o login fica bloqueado por 5 minutos.
+- Desativar a conta ou trocar a senha encerra as sessões abertas dela.
+- Cada ação na fila registra **quem fez**: triagem, chamada, atendimento, reclassificação e
+  aviso de piora visto.
+- A página do paciente (QR) não tem login: o acesso é pelo código do próprio paciente.
+
+### Base de treino do extrator
+
+Cada paciente colocado na fila (e cada reclassificação) vira um **caso anonimizado** em
+`treino.db` (fora do Git), para medir e melhorar a **leitura do relato**. As regras de cor e os
+pesos **nunca** são ajustados com essa base. Para desligar: `--sem-treino`.
+
+| O caso guarda | O caso NÃO guarda |
+|---|---|
+| relato anonimizado | nome, número de atendimento, código do QR |
+| o que o extrator leu no relato, antes da mescla (sinais, trechos, queixas, duração, alergias) | idade exata (vira faixa: 0-11, 12-17, 18-39, 40-59, 60-79, 80+) |
+| respostas diretas do enfermeiro (o gabarito) e aferições | data exata (só ano e mês) |
+| sinais finais, divergências e a cor | login de quem atendeu |
+
+**Anonimização:** CPF, cartão do SUS, telefone, e-mail, CEP, datas, números longos, endereços e
+nomes apresentados ("meu nome é…", "me chamo…", "Dr. …") viram `[NOME]`, `[CPF]` etc., no relato
+e nas respostas em texto. **Isso não garante anonimato**: um nome solto no meio da frase pode
+passar. Por isso cada caso traz `revisar_nomes` (palavras com inicial maiúscula fora do começo da
+frase), e o `exportar --sem-revisar` deixa esses casos de fora.
+
+**Partição fixa:** 20% dos casos são `teste` (sorteio fixo pelo código do caso) e **nunca**
+devem entrar em treino nem em exemplo de prompt.
+
+> **Com pacientes reais**, esta base é dado sensível de saúde (LGPD, art. 11), e usá-la para
+> pesquisa exige aprovação do comitê de ética (CEP). Até lá, use só com dados simulados.
 
 Sobem dois servidores:
 
@@ -649,9 +698,9 @@ referência do Protocolo de Manchester e ficam em `fila.tempos_alvo_minutos` no
 
 ### Segurança
 
-- A **tela do enfermeiro** escuta só em `127.0.0.1` (não aparece na rede), confere os cabeçalhos
-  `Host` e `Origin`, limita o corpo a 1 MB, não carrega nada de fora (sem CDN nem fontes
-  externas) e o texto digitado nunca vira HTML.
+- A **tela do enfermeiro** escuta só em `127.0.0.1` (não aparece na rede), exige login, confere
+  os cabeçalhos `Host` e `Origin`, limita o corpo a 1 MB, não carrega nada de fora (sem CDN nem
+  fontes externas) e o texto digitado nunca vira HTML.
 - A **página do paciente** é outro servidor: responde `GET /p/<código>`, o CSS e uma única
   escrita, `POST /p/<código>/piora` (formulário com um motivo da lista, até 200 bytes). Qualquer
   outra rota é 404 e qualquer outra escrita é 405. Quem está no Wi-Fi não
@@ -700,6 +749,8 @@ triagem/
   afericoes.py            aferições -> sinais medidos
   pontuacao.py, regras.py motor de cor e pontuação
   fila.py                 fila de atendimento (SQLite) e o que o paciente vê
+  usuarios.py             contas de enfermeiro, senhas (scrypt) e sessões
+  treino.py               base de treino do extrator, anonimizada
   voz.py                  transcrição local (faster-whisper) e fala -> resposta, sem IA
   extracao.py             interface Extrator e contrato
   extrator_mock.py        extrator por palavras-chave
@@ -751,5 +802,7 @@ geração_banco_dados.py, salus_treinamento.db   banco de casos simulados para t
 - **Voz:** a precisão do reconhecimento em português ainda não foi medida com gravações reais
   da equipe (os testes automáticos usam um transcritor falso). Teste com o microfone que será
   usado na unidade, em ambiente com barulho.
-- **Fila:** não há login de enfermeiro. A tela só abre na própria máquina, mas qualquer pessoa
-  usando essa máquina consegue chamar e concluir pacientes.
+- **Login:** não há perfis (todo enfermeiro pode tudo) nem recuperação de senha pela tela; a
+  troca é pelo comando `python -m triagem.usuarios senha`.
+- **Base de treino:** a anonimização do texto livre é por padrões e pode deixar passar nomes
+  soltos; ainda não há comando para apagar casos antigos (retenção).

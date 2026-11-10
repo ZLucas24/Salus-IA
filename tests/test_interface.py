@@ -161,6 +161,18 @@ def test_erro_interno_nao_vaza_detalhes(srv, monkeypatch):
     assert status == 500 and "segredo" not in json.dumps(corpo)
 
 
-def test_comando_recusa_porta_ocupada(srv, tmp_path):
-    assert servidor.main(["--porta", str(srv.server_address[1]), "--sem-paciente",
-                          "--fila", str(tmp_path / "fila.db")]) == 2
+def test_comando_recusa_porta_ocupada(srv, tmp_path, capfd):
+    from triagem.usuarios import Usuarios
+    contas = tmp_path / "usuarios.db"
+    u = Usuarios(str(contas))
+    u.criar("ana", "Ana", "senha-segura")
+    u.fechar()
+    assert servidor.main(["--porta", str(srv.server_address[1]), "--sem-paciente", "--sem-voz", "--sem-treino",
+                          "--fila", str(tmp_path / "fila.db"), "--usuarios", str(contas)]) == 2
+    assert "porta" in capfd.readouterr().err
+
+
+def test_comando_exige_ao_menos_uma_conta(tmp_path, capfd):
+    assert servidor.main(["--porta", "0", "--sem-paciente", "--sem-voz", "--sem-treino",
+                          "--fila", str(tmp_path / "fila.db"), "--usuarios", str(tmp_path / "vazio.db")]) == 2
+    assert "triagem.usuarios criar" in capfd.readouterr().err

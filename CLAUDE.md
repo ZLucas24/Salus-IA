@@ -42,6 +42,11 @@ Python 3.11+. Pacote `triagem`, executado com `python -m triagem`.
 - `triagem/voz.py`: entrevista por voz (opcional, `requirements-voz.txt`). Transcrição local, áudio
   nunca salvo; a fala vira resposta por código, dúvida vira `nao_sabe` (nunca "não") e nada entra
   na ficha sem o enfermeiro confirmar.
+- `triagem/usuarios.py`: login do enfermeiro (scrypt, sessão em cookie HttpOnly/SameSite=Strict).
+  Toda rota da tela do enfermeiro exige sessão, exceto /login e o CSS; ações na fila registram quem fez.
+- `triagem/treino.py`: base de treino SÓ do extrator (`treino.db`, fora do Git), com relato
+  anonimizado e leitura crua do extrator. Nunca usar para ajustar regras ou pesos; a partição
+  `teste` nunca entra em treino. Com pacientes reais é dado sensível e exige aprovação do CEP.
 - `triagem/entrevista.py`: fluxo em etapas (validar, interpretar, extrair, mesclar,
   pendências, alertas, pontuar).
 - `agente_triagem.md` e `arquivos de arquitetura/`: documentos da equipe (Anna).
