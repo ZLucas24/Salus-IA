@@ -105,6 +105,21 @@ class Fila:
                     chamado_em REAL,
                     atendido_em REAL
                 )""")
+            # colunas novas em filas criadas por versões anteriores
+            colunas = {c["name"] for c in self._con.execute("PRAGMA table_info(pacientes)")}
+            for nome, tipo in (("ficha", "TEXT"), ("extrator", "TEXT"), ("reclassificado_em", "REAL")):
+                if nome not in colunas:
+                    self._con.execute(f"ALTER TABLE pacientes ADD COLUMN {nome} {tipo}")
+            self._con.execute("""
+                CREATE TABLE IF NOT EXISTS reclassificacoes (
+                    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                    numero          INTEGER NOT NULL REFERENCES pacientes(numero),
+                    cor_antes       TEXT NOT NULL,
+                    cor_depois      TEXT NOT NULL,
+                    pontuacao_antes INTEGER NOT NULL,
+                    pontuacao_depois INTEGER NOT NULL,
+                    em              REAL NOT NULL
+                )""")
             self._con.execute("""
                 CREATE TABLE IF NOT EXISTS avisos (
                     id        INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -118,15 +133,71 @@ class Fila:
         self._con.close()
 
     # --- escrita ------------------------------------------------------------------------
-    def entrar(self, classificacao: Classificacao) -> dict:
+    def entrar(self, classificacao: Classificacao, ficha: dict | None = None, extrator: str | None = None) -> dict:
+        """Põe o paciente na fila. A ficha fica guardada (só nesta máquina) para a reclassificação."""
         token = secrets.token_urlsafe(24)
         with self._trava, self._con:
             cur = self._con.execute(
-                "INSERT INTO pacientes (token, cor, nivel, pontuacao, motivos, chegada, estado) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO pacientes (token, cor, nivel, pontuacao, motivos, chegada, estado, ficha, extrator) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (token, classificacao.cor.value, classificacao.cor.nivel, classificacao.pontuacao,
-                 json.dumps(explicacoes(classificacao), ensure_ascii=False), self._relogio(), AGUARDANDO))
+                 json.dumps(explicacoes(classificacao), ensure_ascii=False), self._relogio(), AGUARDANDO,
+                 json.dumps(ficha, ensure_ascii=False) if ficha is not None else None, extrator))
         return {"numero": cur.lastrowid, "token": token}
+
+    def ficha(self, numero: int) -> dict | None:
+        """Ficha guardada de quem ainda está na fila (aguardando ou chamado)."""
+        if not isinstance(numero, int) or isinstance(numero, bool):
+            return None
+        with self._trava:
+            p = self._con.execute("SELECT * FROM pacientes WHERE numero = ? AND estado != ?",
+                                  (numero, ATENDIDO)).fetchone()
+        if p is None:
+            return None
+        return {"numero": p["numero"], "cor": p["cor"], "pontuacao": p["pontuacao"],
+                "ficha": json.loads(p["ficha"]) if p["ficha"] else None, "extrator": p["extrator"]}
+
+    def reclassificar(self, numero: int, classificacao: Classificacao, ficha: dict, extrator: str,
+                      permitir_reducao: bool = False) -> dict:
+        """Troca a classificação de quem já está na fila, mantendo número, QR e hora de chegada.
+
+        Se a cor nova for MAIS BAIXA, só aplica com `permitir_reducao=True` (confirmação explícita
+        do enfermeiro). Reclassificar marca como vistos os avisos de piora pendentes do paciente.
+        Devolve {"ok": True, ...} ou {"ok": False, "motivo": "nao_encontrado" | "precisa_confirmar", ...}.
+        """
+        if not isinstance(numero, int) or isinstance(numero, bool):
+            return {"ok": False, "motivo": "nao_encontrado"}
+        agora = self._relogio()
+        nova = classificacao.cor
+        with self._trava, self._con:
+            p = self._con.execute("SELECT * FROM pacientes WHERE numero = ? AND estado != ?",
+                                  (numero, ATENDIDO)).fetchone()
+            if p is None:
+                return {"ok": False, "motivo": "nao_encontrado"}
+            resumo = {"numero": numero, "cor_antes": p["cor"], "cor_depois": nova.value,
+                      "pontuacao_antes": p["pontuacao"], "pontuacao_depois": classificacao.pontuacao}
+            if nova.nivel < p["nivel"] and not permitir_reducao:
+                return {"ok": False, "motivo": "precisa_confirmar", **resumo}
+            self._con.execute(
+                "UPDATE pacientes SET cor = ?, nivel = ?, pontuacao = ?, motivos = ?, ficha = ?, extrator = ?, "
+                "reclassificado_em = ? WHERE numero = ?",
+                (nova.value, nova.nivel, classificacao.pontuacao,
+                 json.dumps(explicacoes(classificacao), ensure_ascii=False),
+                 json.dumps(ficha, ensure_ascii=False), extrator, agora, numero))
+            self._con.execute(
+                "INSERT INTO reclassificacoes (numero, cor_antes, cor_depois, pontuacao_antes, pontuacao_depois, em) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (numero, p["cor"], nova.value, p["pontuacao"], classificacao.pontuacao, agora))
+            self._con.execute("UPDATE avisos SET visto_em = ? WHERE numero = ? AND visto_em IS NULL",
+                              (agora, numero))
+        return {"ok": True, **resumo}
+
+    def historico(self, numero: int) -> list[dict]:
+        with self._trava:
+            linhas = self._con.execute(
+                "SELECT cor_antes, cor_depois, pontuacao_antes, pontuacao_depois, em FROM reclassificacoes "
+                "WHERE numero = ? ORDER BY em, id", (numero,)).fetchall()
+        return [dict(x) for x in linhas]
 
     def chamar(self, numero: int) -> bool:
         return self._mudar(numero, CHAMADO, "chamado_em", de=(AGUARDANDO,))
@@ -205,7 +276,9 @@ class Fila:
         return {"numero": p["numero"], "cor": p["cor"], "pontuacao": p["pontuacao"],
                 "motivos": json.loads(p["motivos"]), "estado": p["estado"], "posicao": posicao,
                 "espera_min": int((agora - p["chegada"]) // 60), "token": p["token"],
-                "avisos_piora": avisos.get(p["numero"], [])}
+                "avisos_piora": avisos.get(p["numero"], []),
+                "reclassificado_ha_min": (int((agora - p["reclassificado_em"]) // 60)
+                                          if p["reclassificado_em"] is not None else None)}
 
     def status_paciente(self, token: str) -> dict | None:
         """Visão do paciente. None se o código não existe ou já foi atendido."""
@@ -238,5 +311,6 @@ class Fila:
             "espera_min": int((agora - p["chegada"]) // 60),
             "ordem": ordem_das_cores(),
             "aviso": aviso,
+            "revisado": p["reclassificado_em"] is not None,
             "motivos_piora": [{"codigo": k, "texto": v} for k, v in MOTIVOS_PIORA.items()],
         }

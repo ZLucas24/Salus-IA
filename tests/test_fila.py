@@ -420,3 +420,110 @@ def test_paciente_chamado_nao_ve_o_formulario(servidores):
     chamar(enf, "POST", "/api/fila/chamar", {"numero": r["numero"]})
     caminho = r["url"].split(str(pac.server_address[1]), 1)[1]
     assert 'name="motivo"' not in chamar(pac, "GET", caminho)[1].decode("utf-8")
+
+
+# --- reclassificação -----------------------------------------------------------------------
+
+def test_reclassificar_mantem_numero_qr_e_chegada(fila, relogio):
+    a = fila.entrar(cls("verde", 10), {"x": 1}, "mock")
+    relogio.t += 60
+    b = fila.entrar(cls("amarelo", 10))
+    relogio.t += 60
+    r = fila.reclassificar(a["numero"], cls("amarelo", 10, ("RC-15",)), {"x": 2}, "mock")
+    assert r["ok"] and (r["cor_antes"], r["cor_depois"]) == ("verde", "amarelo")
+    assert ordem(fila) == [a["numero"], b["numero"]]  # mesma cor e pontuação: quem chegou antes
+    s = fila.status_paciente(a["token"])
+    assert s["cor"] == "amarelo" and s["motivos"] == ["Falta de ar"] and s["revisado"]
+    assert fila.ficha(a["numero"])["ficha"] == {"x": 2}
+    assert fila.historico(a["numero"])[0]["cor_depois"] == "amarelo"
+
+
+def test_baixar_a_cor_exige_confirmacao(fila):
+    a = fila.entrar(cls("laranja", 50, ("RC-05",)), {}, "mock")
+    r = fila.reclassificar(a["numero"], cls("verde"), {}, "mock")
+    assert not r["ok"] and r["motivo"] == "precisa_confirmar"
+    assert fila.status_paciente(a["token"])["cor"] == "laranja" and fila.historico(a["numero"]) == []
+    assert fila.reclassificar(a["numero"], cls("verde"), {}, "mock", permitir_reducao=True)["ok"]
+    assert fila.status_paciente(a["token"])["cor"] == "verde"
+
+
+def test_baixar_so_a_pontuacao_na_mesma_cor_nao_pede_confirmacao(fila):
+    a = fila.entrar(cls("amarelo", 40))
+    assert fila.reclassificar(a["numero"], cls("amarelo", 5), {}, "mock")["ok"]
+
+
+def test_reclassificar_marca_avisos_como_vistos(fila):
+    a = fila.entrar(cls("verde"))
+    fila.avisar_piora(a["token"], "falta_de_ar")
+    fila.reclassificar(a["numero"], cls("laranja", 30, ("RC-05",)), {}, "mock")
+    assert fila.avisos_pendentes() == []
+
+
+@pytest.mark.parametrize("numero", [999, True, None, "1"])
+def test_reclassificar_quem_nao_esta_na_fila(fila, numero):
+    fila.entrar(cls("verde"))
+    assert fila.reclassificar(numero, cls("vermelho"), {}, "mock") == {"ok": False, "motivo": "nao_encontrado"}
+    assert fila.ficha(numero) is None
+
+
+def test_atendido_nao_pode_ser_reclassificado(fila):
+    a = fila.entrar(cls("verde"))
+    fila.concluir(a["numero"])
+    assert fila.reclassificar(a["numero"], cls("vermelho"), {}, "mock")["motivo"] == "nao_encontrado"
+
+
+def test_fila_antiga_ganha_as_colunas_novas(tmp_path, relogio):
+    import sqlite3
+    caminho = str(tmp_path / "antiga.db")
+    con = sqlite3.connect(caminho)
+    con.execute("CREATE TABLE pacientes (numero INTEGER PRIMARY KEY AUTOINCREMENT, token TEXT UNIQUE NOT NULL, "
+                "cor TEXT NOT NULL, nivel INTEGER NOT NULL, pontuacao INTEGER NOT NULL, motivos TEXT NOT NULL, "
+                "chegada REAL NOT NULL, estado TEXT NOT NULL, chamado_em REAL, atendido_em REAL)")
+    con.execute("INSERT INTO pacientes (token, cor, nivel, pontuacao, motivos, chegada, estado) "
+                "VALUES (?, 'verde', 1, 0, '[]', 0, 'aguardando')", ("T" * 32,))
+    con.commit()
+    con.close()
+    f = Fila(caminho, relogio=relogio)
+    assert f.ficha(1)["ficha"] is None  # entrou antes: sem ficha guardada
+    assert f.listar()[0]["reclassificado_ha_min"] is None
+    f.fechar()
+
+
+FICHA_LEVE = {"dados_atendente": {"idade": 30}, "respostas": {}}
+
+
+def test_api_reclassificar(servidores):
+    enf, pac, _ = servidores
+    r = json.loads(chamar(enf, "POST", "/api/fila", {"ficha": FICHA_LEVE})[1])
+    status, corpo = chamar(enf, "POST", "/api/fila/ficha", {"numero": r["numero"]})
+    assert status == 200 and json.loads(corpo)["ficha"] == FICHA_LEVE
+    status, corpo = chamar(enf, "POST", "/api/fila/reclassificar", {"numero": r["numero"], "ficha": FICHA_GRAVE})
+    resp = json.loads(corpo)
+    assert status == 200 and (resp["cor_antes"], resp["cor_depois"]) == ("verde", "laranja")
+    caminho = r["url"].split(str(pac.server_address[1]), 1)[1]
+    html = chamar(pac, "GET", caminho)[1].decode("utf-8")
+    assert "Laranja" in html and "A equipe revisou sua classificação" in html and ">001<" in html
+
+
+def test_api_reclassificar_para_baixo_pede_confirmacao(servidores):
+    enf, _, _ = servidores
+    r = json.loads(chamar(enf, "POST", "/api/fila", {"ficha": FICHA_GRAVE})[1])
+    status, corpo = chamar(enf, "POST", "/api/fila/reclassificar", {"numero": r["numero"], "ficha": FICHA_LEVE})
+    assert status == 409 and json.loads(corpo)["cor_depois"] == "verde"
+    assert json.loads(chamar(enf, "GET", "/api/fila")[1])["pacientes"][0]["cor"] == "laranja"
+    status, _ = chamar(enf, "POST", "/api/fila/reclassificar",
+                       {"numero": r["numero"], "ficha": FICHA_LEVE, "confirmar_reducao": "sim"})
+    assert status == 409  # só o booleano true confirma
+    status, _ = chamar(enf, "POST", "/api/fila/reclassificar",
+                       {"numero": r["numero"], "ficha": FICHA_LEVE, "confirmar_reducao": True})
+    assert status == 200
+
+
+def test_api_reclassificar_valida_ficha_e_numero(servidores):
+    enf, _, _ = servidores
+    r = json.loads(chamar(enf, "POST", "/api/fila", {"ficha": FICHA_LEVE})[1])
+    assert chamar(enf, "POST", "/api/fila/reclassificar", {"numero": r["numero"], "ficha": {"respostas": {}}})[0] == 422
+    assert chamar(enf, "POST", "/api/fila/reclassificar", {"numero": 999, "ficha": FICHA_LEVE})[0] == 404
+    assert chamar(enf, "POST", "/api/fila/reclassificar", {"numero": r["numero"]})[0] == 400
+    assert chamar(enf, "POST", "/api/fila/ficha", {"numero": 999})[0] == 404
+    assert json.loads(chamar(enf, "GET", "/api/fila")[1])["pacientes"][0]["cor"] == "verde"

@@ -38,6 +38,7 @@ Python 3.11+. Pacote `triagem`, executado com `python -m triagem`.
   A página do paciente é outro servidor; a única escrita é o aviso de piora (motivo de lista fixa,
   sem texto livre), que alerta a equipe e NUNCA muda cor nem posição. Nunca mostra pontuação,
   posição exata nem dados de outros pacientes (há teste). A cor da fila é recalculada no servidor.
+  Reclassificar mantém número, QR e chegada; baixar a cor exige `confirmar_reducao: true`.
 - `triagem/voz.py`: entrevista por voz (opcional, `requirements-voz.txt`). Transcrição local, áudio
   nunca salvo; a fala vira resposta por código, dúvida vira `nao_sabe` (nunca "não") e nada entra
   na ficha sem o enfermeiro confirmar.
