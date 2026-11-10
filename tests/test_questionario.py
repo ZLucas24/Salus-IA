@@ -7,6 +7,7 @@ import pytest
 from triagem.questionario import ErroResposta, interpretar, perguntas_por_id
 from triagem.schema import Duracao
 from triagem.sinais import NomeSinal, Origem, Status
+from triagem.texto import MAX_RELATO
 
 P = perguntas_por_id()
 
@@ -145,9 +146,9 @@ def test_alergia_q10():
 
 
 def test_texto_livre_valida_tamanho_depois_do_strip_e_vazio():
-    assert interpretar(P["Q01"], "  " + "x" * 200 + "  ").relato == "x" * 200
+    assert interpretar(P["Q01"], "  " + "x" * MAX_RELATO + "  ").relato == "x" * MAX_RELATO
     with pytest.raises(ErroResposta):
-        interpretar(P["Q01"], "x" * 201)
+        interpretar(P["Q01"], "x" * (MAX_RELATO + 1))
     with pytest.raises(ErroResposta):
         interpretar(P["Q01"], "   ")
 

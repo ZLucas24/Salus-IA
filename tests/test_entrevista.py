@@ -8,6 +8,7 @@ from triagem.entrevista import FichaInvalida, processar_ficha
 from triagem.extracao import Extracao
 from triagem.schema import Alergias, DadosAtendente, Duracao, SaidaTriagem, Sinal
 from triagem.sinais import NomeSinal, Origem, Queixa, Status
+from triagem.texto import MAX_RELATO
 
 
 # --- validação ------------------------------------------------------------------
@@ -17,7 +18,7 @@ from triagem.sinais import NomeSinal, Origem, Queixa, Status
     ({"dados_atendente": {}, "respostas": {}}, "idade"),
     ({"dados_atendente": {"idade": 30}, "respostas": {}, "extra": 1}, "extra"),
     ({"dados_atendente": {"idade": 30, "pulso": 80}, "respostas": {}}, "pulso"),
-    (ficha({"Q01": "x" * 201}), "Q01"),
+    (ficha({"Q01": "x" * (MAX_RELATO + 1)}), "Q01"),
     (ficha({"Q05": 11}), "Q05"),
     (ficha({"Q09": "talvez"}), "Q09"),
     (ficha({"Q99": True}), "Q99"),
@@ -52,15 +53,15 @@ def test_falha_de_validacao_nao_chama_o_extrator():
     assert falso.chamadas == []
 
 
-def test_relato_com_exatamente_200_caracteres():
-    assert len(processar(ficha({"Q01": "x" * 200})).relato_original) == 200
+def test_relato_com_exatamente_o_maximo_de_caracteres():
+    assert len(processar(ficha({"Q01": "x" * MAX_RELATO})).relato_original) == MAX_RELATO
 
 
 # --- schema ----------------------------------------------------------------------------
 
-def test_schema_rejeita_relato_com_mais_de_200_caracteres():
+def test_schema_rejeita_relato_acima_do_maximo():
     with pytest.raises(ValidationError):
-        SaidaTriagem(relato_original="x" * 201, dados_atendente={"idade": 1}, extrator="f")
+        SaidaTriagem(relato_original="x" * (MAX_RELATO + 1), dados_atendente={"idade": 1}, extrator="f")
 
 
 def test_schema_rejeita_sinal_duplicado_nan_e_alergia_como_sinal():

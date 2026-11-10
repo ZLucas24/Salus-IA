@@ -18,7 +18,7 @@
       "id": "Q01", "obrigatoriedade": "N",
       "texto": "O que você está sentindo e o que fez você procurar ajuda hoje?",
       "finalidade": "Queixa principal (relato livre)",
-      "partes": [{"nome": "resposta", "forma": "texto", "max_caracteres": 200}],
+      "partes": [{"nome": "resposta", "forma": "texto", "max_caracteres": 1000}],
       "campos": [{"campo": "relato", "de": "resposta"}]
     },
     {
