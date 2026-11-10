@@ -22,7 +22,7 @@ Material do pitch no AKCIT Camp 2026, em [docs/apresentacao/](docs/apresentacao/
 
 | Arquivo | O que é |
 |---|---|
-| [pitch_deck.pdf](docs/apresentacao/pitch_deck.pdf) | pitch deck (10 slides): problema, solução, segurança, mercado, modelo de negócio e próximos passos |
+| [pitch_deck.pdf](docs/apresentacao/pitch_deck.pdf) | pitch deck (11 slides): problema, solução, segurança, o que já funciona, mercado, modelo de negócio e próximos passos. A fonte editável é o [pitch_deck.html](docs/apresentacao/pitch_deck.html) |
 | [business_model_canvas.pdf](docs/apresentacao/business_model_canvas.pdf) | Business Model Canvas, com o que já existe, o que é hipótese e como validar |
 | [demo_agente.mp4](docs/apresentacao/demo_agente.mp4) | vídeo de demonstração do agente de triagem |
 
@@ -651,7 +651,8 @@ Lista os pacientes chamados e, depois, os que aguardam, na ordem **cor → pontu
 Mostra posição, número, cor, pontuação, motivo e espera, com os botões **Chamar**,
 **Reclassificar**, **Atendido** e **Ver QR**. Atualiza sozinha a cada 5 segundos. A fila fica
 salva em SQLite ([triagem/fila.py](triagem/fila.py)) e sobrevive a um reinício. A ficha de cada
-paciente também fica guardada nesse arquivo, só nesta máquina, para a reclassificação.
+paciente também fica guardada nesse arquivo, só nesta máquina, para a reclassificação, e é
+**apagada quando ele é marcado como atendido**.
 
 **Reclassificar** leva a ficha guardada de volta para a aba Triagem, com um aviso azul no topo.
 O enfermeiro ajusta as respostas (digitando ou por voz) e clica em **Atualizar classificação**:

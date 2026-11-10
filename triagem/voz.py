@@ -269,6 +269,8 @@ def interpretar_fala(parte: dict, texto: str) -> Entendido:
         # verbo afirmativo só conta abrindo a frase ("Tem falta de ar", "Ela tem"), para
         # "o paciente está aqui" não virar "sim"
         toks = _tokens(norm)
+        if not toks:  # só pontuação ou ruído ("...", "?")
+            return Entendido(motivo="não reconheci sim nem não")
         abre = toks[1] if len(toks) > 1 and toks[0] in ("ele", "ela") else toks[0]
         if sim or abre in AFIRMA:
             return Entendido(valor=True, entendido=True)

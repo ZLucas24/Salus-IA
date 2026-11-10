@@ -216,7 +216,14 @@ class Fila:
         return self._mudar(numero, CHAMADO, "chamado", por, de=(AGUARDANDO,))
 
     def concluir(self, numero: int, por: str | None = None) -> bool:
-        return self._mudar(numero, ATENDIDO, "atendido", por, de=(AGUARDANDO, CHAMADO))
+        """Marca como atendido e APAGA a ficha guardada e o vínculo com a base de treino:
+        depois do atendimento não há mais reclassificação, então o dado identificado não
+        precisa continuar no disco."""
+        ok = self._mudar(numero, ATENDIDO, "atendido", por, de=(AGUARDANDO, CHAMADO))
+        if ok:
+            with self._trava, self._con:
+                self._con.execute("UPDATE pacientes SET ficha = NULL, caso_id = NULL WHERE numero = ?", (numero,))
+        return ok
 
     def _mudar(self, numero, novo: str, prefixo: str, por: str | None, de: tuple[str, ...]) -> bool:
         if not isinstance(numero, int) or isinstance(numero, bool):

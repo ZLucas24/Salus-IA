@@ -426,7 +426,10 @@ class Manipulador(BaseHTTPRequestHandler):
 
     def _fila_ficha(self, corpo: dict) -> tuple[int, dict]:
         f = self.server.fila.ficha(self._numero(corpo))
-        return (200, f) if f is not None else (404, {"erros": ["paciente não está na fila"]})
+        if f is None:
+            return 404, {"erros": ["paciente não está na fila"]}
+        f.pop("caso_id", None)  # o vínculo com a base de treino não sai do servidor
+        return 200, f
 
     def _fila_reclassificar(self, corpo: dict) -> tuple[int, dict]:
         par = self._ficha_e_extrator(corpo)

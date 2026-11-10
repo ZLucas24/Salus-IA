@@ -45,7 +45,7 @@ def test_recusa(texto):
     assert ouvir("Q08", texto) == "recusou"
 
 
-@pytest.mark.parametrize("texto", ["sim e não", "não, sim", "hmm", "o paciente está aqui", ""])
+@pytest.mark.parametrize("texto", ["sim e não", "não, sim", "hmm", "o paciente está aqui", "", "...", "?!", "ele"])
 def test_sim_nao_ambiguo_ou_vazio_nao_e_entendido(texto):
     e = interpretar_fala(parte("Q09"), texto)
     assert not e.entendido and e.valor is None and e.motivo

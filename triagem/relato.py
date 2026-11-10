@@ -14,7 +14,7 @@ import json
 import logging
 import sys
 
-from triagem.cli import SAIDA_INTERNO, SAIDA_OK, SAIDA_USO, carregar_env, configurar_io, escrever_saida
+from triagem.cli import SAIDA_INTERNO, SAIDA_OK, carregar_env, configurar_io, escrever_saida
 from triagem.extracao import NOME_PADRAO, NOMES_EXTRATORES, criar_extrator
 from triagem.texto import validar_relato
 

@@ -89,6 +89,8 @@ function h(tag, props = {}, ...filhos) {
     if (k === 'class') el.className = v;
     else if (k === 'texto') el.textContent = v;
     else if (k.startsWith('on')) el.addEventListener(k.slice(2), v);
+    // estilo pelo CSSOM: a CSP (style-src 'self') bloqueia o atributo style="" e a barra ficava cheia
+    else if (k === 'style') el.style.cssText = v;
     else el.setAttribute(k, v === true ? '' : v);
   }
   for (const f of filhos.flat()) if (f !== null && f !== undefined && f !== false) el.append(f);
@@ -730,6 +732,8 @@ function renderModo() {
   const caixa = $('#modo-reclass');
   const r = estado.reclassificando;
   caixa.hidden = !r;
+  // durante a reclassificação não dá para carregar um exemplo por cima da ficha do paciente
+  $('#exemplo').disabled = Boolean(r);
   if (!r) { caixa.replaceChildren(); return; }
   caixa.replaceChildren(
     h('span', {}, h('strong', { texto: `Reclassificando o paciente ${numeroFila(r.numero)}` }),
