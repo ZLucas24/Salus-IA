@@ -27,7 +27,8 @@ from triagem.texto import sem_acentos
 
 log = logging.getLogger("triagem.voz")
 
-MODELO_PADRAO = "small"
+MODELO_PADRAO = "small"        # relato livre: precisa de mais acerto
+MODELO_RAPIDO_PADRAO = "base"  # respostas curtas: ~3x mais rápido em CPU
 
 
 class ErroVoz(RuntimeError):
@@ -40,8 +41,14 @@ class Transcritor(ABC):
     nome: str
 
     @abstractmethod
-    def transcrever(self, audio: bytes) -> str:
-        """Devolve o texto falado. Levanta ErroVoz se não conseguir."""
+    def transcrever(self, audio: bytes, curta: bool = False, dica: str | None = None,
+                    preciso: bool = False) -> str:
+        """Devolve o texto falado. Levanta ErroVoz se não conseguir.
+
+        `curta`: a resposta esperada é curta (sim/não, número, opção) e pode ir pelo modelo
+        rápido. `dica`: vocabulário esperado. `preciso`: força o modelo maior (segunda tentativa)."""
+
+    tem_reserva = False  # True se há um modelo maior para tentar de novo quando o rápido não entende
 
 
 def whisper_instalado() -> bool:
@@ -49,45 +56,73 @@ def whisper_instalado() -> bool:
 
 
 class TranscritorWhisper(Transcritor):
-    """faster-whisper local, em CPU (int8). O modelo é carregado uma vez e reaproveitado."""
+    """faster-whisper local, em CPU (int8). Dois modelos, carregados uma vez e reaproveitados:
+    o rápido para respostas curtas e o maior para o relato (e como reserva do rápido)."""
 
     # Vocabulário do domínio: ajuda o modelo a escrever as palavras certas.
-    DICA = ("Triagem em pronto-socorro. Respostas curtas: sim, não, não sabe, recusou. "
-            "Dor no peito, falta de ar, febre, vômito, diarreia, desmaio, alergia, dipirona, "
-            "insulina, anticoagulante, pressão alta, diabetes.")
+    DICA = ("Triagem em pronto-socorro. Dor no peito, falta de ar, febre, vômito, diarreia, desmaio, "
+            "alergia, dipirona, insulina, anticoagulante, pressão alta, diabetes.")
 
-    def __init__(self, modelo: str | None = None):
+    def __init__(self, modelo: str | None = None, rapido: str | None = None):
         self.modelo_nome = modelo or os.environ.get("TRIAGEM_WHISPER", MODELO_PADRAO)
-        self.nome = f"whisper:{self.modelo_nome}"
-        self._modelo = None
+        self.rapido_nome = rapido or os.environ.get("TRIAGEM_WHISPER_RAPIDO", MODELO_RAPIDO_PADRAO)
+        self.tem_reserva = self.rapido_nome != self.modelo_nome
+        self.nome = (f"whisper:{self.rapido_nome}+{self.modelo_nome}" if self.tem_reserva
+                     else f"whisper:{self.modelo_nome}")
+        self._modelos: dict[str, Any] = {}
         self._trava = threading.Lock()
 
-    def carregar(self):
+    def carregar(self, nome: str | None = None):
+        """Carrega (uma vez) o modelo pedido; sem nome, carrega os dois."""
+        if nome is None:
+            self.carregar(self.rapido_nome)
+            return self.carregar(self.modelo_nome)
         with self._trava:
-            if self._modelo is None:
+            if nome not in self._modelos:
                 try:
                     from faster_whisper import WhisperModel
                 except ImportError as e:
                     raise ErroVoz("faster-whisper não está instalado (pip install -r requirements-voz.txt)") from e
-                log.info("carregando o modelo de voz %s", self.modelo_nome)
+                log.info("carregando o modelo de voz %s", nome)
                 try:  # usa o modelo já baixado, sem tocar na rede
-                    self._modelo = WhisperModel(self.modelo_nome, device="cpu", compute_type="int8",
-                                                local_files_only=True)
+                    modelo = WhisperModel(nome, device="cpu", compute_type="int8", local_files_only=True)
                 except Exception:
-                    log.info("modelo %s ainda não baixado; baixando (só na primeira vez, ~500 MB)",
-                             self.modelo_nome)
-                    self._modelo = WhisperModel(self.modelo_nome, device="cpu", compute_type="int8")
-            return self._modelo
+                    log.info("modelo %s ainda não baixado; baixando (só na primeira vez)", nome)
+                    modelo = WhisperModel(nome, device="cpu", compute_type="int8")
+                self._modelos[nome] = modelo
+            return self._modelos[nome]
 
-    def transcrever(self, audio: bytes) -> str:
-        modelo = self.carregar()
+    def transcrever(self, audio: bytes, curta: bool = False, dica: str | None = None,
+                    preciso: bool = False) -> str:
+        modelo = self.carregar(self.rapido_nome if curta and not preciso else self.modelo_nome)
         amostras = decodificar(audio)
         try:
-            segmentos, _ = modelo.transcribe(amostras, language="pt", beam_size=5,
-                                             vad_filter=True, initial_prompt=self.DICA)
+            # busca gulosa, sem marcas de tempo e sem VAD: a gravação já chega recortada pela página
+            segmentos, _ = modelo.transcribe(
+                amostras, language="pt", beam_size=1 if curta else 3, temperature=0.0,
+                without_timestamps=True, condition_on_previous_text=False, vad_filter=not curta,
+                initial_prompt=dica or self.DICA)
             return " ".join(s.text.strip() for s in segmentos).strip()
         except Exception as e:
             raise ErroVoz(f"não foi possível transcrever o áudio ({type(e).__name__})") from e
+
+
+def dica_da_parte(parte: dict) -> str | None:
+    """Vocabulário esperado na resposta, para o modelo escrever a palavra certa ("10", não "des")."""
+    forma = parte["forma"]
+    if forma == "sim_nao":
+        return "Resposta: sim. Não. Não sabe. Recusou."
+    if forma in ("escala", "numero"):
+        return "Resposta em número: 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10."
+    if forma == "numero_unidade":
+        return "Resposta: 30 minutos. 2 horas. 3 dias. 1 semana."
+    if forma in ("opcao", "multiplas"):
+        return "Resposta: " + ", ".join(o.replace("_", " ") for o in parte["opcoes"]) + ". Nenhuma. Não sabe."
+    return None
+
+
+def forma_curta(parte: dict) -> bool:
+    return parte["forma"] != "texto"
 
 
 def decodificar(audio: bytes):
@@ -130,7 +165,10 @@ NAO_SABE = ["nao sabe", "nao sei", "sei la", "nao lembra", "nao lembro", "nao te
             "incerto", "nao sabe dizer", "nao soube"]
 
 NEGACAO = {"nao", "nunca", "negativo", "nenhum", "nenhuma", "nada", "jamais", "sem", "nem"}
-SIM = {"sim", "positivo", "afirmativo", "isso", "claro", "uhum", "aham", "exato", "correto"}
+# "sin", "cim": como o modelo às vezes escreve um "sim" curto. Para o "não" NÃO há variantes
+# aproximadas, de propósito: um "não" só entra quando foi ouvido com clareza.
+SIM = {"sim", "sin", "cim", "positivo", "afirmativo", "isso", "claro", "uhum", "aham", "exato", "correto",
+       "certeza", "verdade"}
 AFIRMA = {"tenho", "tem", "teve", "tive", "estou", "esta", "sinto", "sente", "sentiu", "senti",
           "consigo", "consegue", "usa", "uso", "toma", "tomo", "tomou", "tomei", "fez", "fiz",
           "fica", "ficou", "desmaiou", "desmaiei", "vomitou", "vomitando", "esta"}
@@ -139,6 +177,12 @@ UNIDADES = {"zero": 0, "um": 1, "uma": 1, "dois": 2, "duas": 2, "tres": 3, "quat
             "cinco": 5, "seis": 6, "sete": 7, "oito": 8, "nove": 9, "dez": 10, "onze": 11,
             "doze": 12, "treze": 13, "quatorze": 14, "catorze": 14, "quinze": 15,
             "dezesseis": 16, "dezessete": 17, "dezoito": 18, "dezenove": 19}
+# Como o modelo costuma escrever um número curto dito sozinho ("Des." para "dez").
+# Só vale onde a pergunta espera um número; o enfermeiro confirma antes de entrar na ficha.
+NUMEROS_APROXIMADOS = {"zeru": 0, "cero": 0, "hum": 1, "doiz": 2, "doi": 2, "treis": 3, "trez": 3,
+                       "tre": 3, "quatru": 4, "cuatro": 4, "sinco": 5, "cinto": 5, "seiz": 6, "ceis": 6,
+                       "seti": 7, "sette": 7, "oitu": 8, "oto": 8, "novi": 9, "des": 10, "deis": 10,
+                       "dex": 10, "deiz": 10, "dess": 10}
 DEZENAS = {"vinte": 20, "trinta": 30, "quarenta": 40, "cinquenta": 50, "sessenta": 60,
            "setenta": 70, "oitenta": 80, "noventa": 90}
 TEMPO = {"minuto": "minutos", "minutos": "minutos", "min": "minutos", "hora": "horas",
@@ -216,6 +260,8 @@ def _numeros(tokens: list[str]) -> list[float]:
             continue
         if t in ("meia", "meio"):
             nums.append(0.5)
+        elif t in NUMEROS_APROXIMADOS:
+            nums.append(float(NUMEROS_APROXIMADOS[t]))
         i += 1
     return nums
 
@@ -272,7 +318,7 @@ def interpretar_fala(parte: dict, texto: str) -> Entendido:
         if not toks:  # só pontuação ou ruído ("...", "?")
             return Entendido(motivo="não reconheci sim nem não")
         abre = toks[1] if len(toks) > 1 and toks[0] in ("ele", "ela") else toks[0]
-        if sim or abre in AFIRMA:
+        if sim or abre in AFIRMA or toks == ["e"]:  # "É."
             return Entendido(valor=True, entendido=True)
         return Entendido(motivo="não reconheci sim nem não")
 

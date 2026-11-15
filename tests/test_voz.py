@@ -143,14 +143,16 @@ def test_valor_entendido_passa_na_validacao_do_questionario():
 class TranscritorFalso(Transcritor):
     nome = "falso"
 
-    def __init__(self, texto="não", erro=None):
-        self.texto, self.erro, self.recebidos = texto, erro, []
+    def __init__(self, texto="não", erro=None, preciso=None):
+        self.texto, self.erro, self.recebidos, self.pedidos = texto, erro, [], []
+        self.texto_preciso, self.tem_reserva = preciso, preciso is not None
 
-    def transcrever(self, audio):
+    def transcrever(self, audio, curta=False, dica=None, preciso=False):
         self.recebidos.append(audio)
+        self.pedidos.append({"curta": curta, "dica": dica, "preciso": preciso})
         if self.erro:
             raise self.erro
-        return self.texto
+        return self.texto_preciso if preciso else self.texto
 
 
 @pytest.fixture
@@ -179,6 +181,7 @@ def test_rota_transcreve_e_interpreta(srv_voz):
     status, r = enviar(s, "/api/voz?pergunta=Q09&parte=resposta")
     assert status == 200 and r["transcricao"] == "não" and r["valor"] is False and r["entendido"]
     assert falso.recebidos == [b"RIFF...."]
+    assert falso.pedidos[0]["curta"] is True and "sim" in falso.pedidos[0]["dica"]  # resposta curta: modelo rápido
     falso.texto = "acho que sim"
     assert enviar(s, "/api/voz?pergunta=Q09")[1]["valor"] == "nao_sabe"
 
@@ -188,6 +191,56 @@ def test_rota_nao_preenche_o_que_nao_entendeu(srv_voz):
     falso.texto = "sim e não"
     status, r = enviar(s, "/api/voz?pergunta=Q09")
     assert status == 200 and r["entendido"] is False and r["valor"] is None and r["motivo"]
+
+
+def test_relato_vai_pelo_modelo_preciso(srv_voz):
+    s, falso = srv_voz
+    falso.texto = "dor no peito há duas horas"
+    assert enviar(s, "/api/voz?pergunta=Q01")[1]["valor"] == "dor no peito há duas horas"
+    assert falso.pedidos[-1] == {"curta": False, "dica": None, "preciso": False}
+
+
+def test_quando_o_rapido_nao_entende_tenta_o_preciso_uma_vez():
+    falso = TranscritorFalso(texto="hmm", preciso="sete")
+    s = criar_servidor(0, Fila(), None, falso)
+    threading.Thread(target=s.serve_forever, daemon=True).start()
+    try:
+        r = enviar(s, "/api/voz?pergunta=Q05")[1]
+        assert r["entendido"] and r["valor"] == 7 and r["transcricao"] == "sete"
+        assert [p["preciso"] for p in falso.pedidos] == [False, True]
+        falso.pedidos.clear()
+        falso.texto = "oito"  # entendeu de primeira: não gasta a segunda tentativa
+        assert enviar(s, "/api/voz?pergunta=Q05")[1]["valor"] == 8 and len(falso.pedidos) == 1
+        falso.texto, falso.texto_preciso = "hmm", "ahn"  # nenhum entendeu: devolve o que o rápido ouviu
+        r = enviar(s, "/api/voz?pergunta=Q05")[1]
+        assert r["entendido"] is False and r["transcricao"] == "hmm"
+    finally:
+        s.shutdown()
+        s.server_close()
+
+
+def test_dica_por_tipo_de_pergunta():
+    from triagem.voz import dica_da_parte, forma_curta
+    assert "10" in dica_da_parte(parte("Q05")) and forma_curta(parte("Q05"))
+    assert "aperto" in dica_da_parte(parte("Q04"))
+    assert dica_da_parte(parte("Q01")) is None and not forma_curta(parte("Q01"))
+
+
+@pytest.mark.parametrize("texto, esperado", [
+    ("Des.", 10), ("deis", 10), ("Treis", 3), ("sinco", 5), ("nota des", 10), ("des e sete", None),
+])
+def test_numero_escrito_do_jeito_que_o_modelo_ouve(texto, esperado):
+    assert ouvir("Q05", texto) == esperado
+
+
+@pytest.mark.parametrize("texto", ["Sin.", "É.", "com certeza", "é verdade"])
+def test_sim_curto(texto):
+    assert ouvir("Q09", texto) is True
+
+
+@pytest.mark.parametrize("texto", ["nau", "num", "na", "n"])
+def test_nao_aproximado_nunca_vira_negado(texto):
+    assert ouvir("Q09", texto) is not False
 
 
 @pytest.mark.parametrize("caminho", ["/api/voz?pergunta=Q99", "/api/voz?pergunta=Q02&parte=nada", "/api/voz"])

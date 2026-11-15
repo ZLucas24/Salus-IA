@@ -2,8 +2,8 @@
 
 Ordem: cor (mais grave primeiro), depois pontuação dentro da cor (maior primeiro), depois
 quem chegou antes. Cada paciente recebe um número de atendimento e um código aleatório
-(o do QR), que só serve para consultar o próprio status e deixa de valer quando ele é
-atendido.
+(o do QR), que só serve para consultar o próprio status. Chamar o paciente já o marca
+como atendido; o QR mostra "Você foi chamado" por alguns minutos e depois deixa de valer.
 
 O paciente nunca vê a pontuação, a posição exata nem dados de outros pacientes: vê a cor,
 o motivo em linguagem simples, uma faixa de pessoas à frente e o tempo-alvo da cor. Ele pode
@@ -38,6 +38,9 @@ MOTIVOS_PIORA = {
     "vomito": "Vômito",
     "outro": "Outro motivo",
 }
+# Chamar já marca como atendido (um clique só). Durante esta janela a chamada pode ser desfeita
+# (clique errado) e o QR do paciente mostra "Você foi chamado"; depois a ficha guardada é apagada.
+JANELA_CHAMADA_S = 600
 ESPERA_ENTRE_AVISOS_S = 120  # evita repetição acidental do mesmo paciente
 AVISO_OK, AVISO_ESPERA, AVISO_INVALIDO = "ok", "espera", "invalido"
 
@@ -134,6 +137,9 @@ class Fila:
                 )""")
             if "visto_por" not in {c["name"] for c in self._con.execute("PRAGMA table_info(avisos)")}:
                 self._con.execute("ALTER TABLE avisos ADD COLUMN visto_por TEXT")
+            # versões anteriores tinham o estado intermediário "chamado"; hoje chamar já atende
+            self._con.execute("UPDATE pacientes SET estado = ?, atendido_em = chamado_em WHERE estado = ?",
+                              (ATENDIDO, CHAMADO))
 
     def fechar(self) -> None:
         self._con.close()
@@ -157,7 +163,7 @@ class Fila:
         return {"numero": cur.lastrowid, "token": token, "caso_id": caso_id}
 
     def ficha(self, numero: int) -> dict | None:
-        """Ficha guardada de quem ainda está na fila (aguardando ou chamado)."""
+        """Ficha guardada de quem ainda está na fila."""
         if not isinstance(numero, int) or isinstance(numero, bool):
             return None
         with self._trava:
@@ -213,28 +219,59 @@ class Fila:
         return [dict(x) for x in linhas]
 
     def chamar(self, numero: int, por: str | None = None) -> bool:
-        return self._mudar(numero, CHAMADO, "chamado", por, de=(AGUARDANDO,))
+        """Chama o paciente e JÁ marca como atendido: ele sai da fila num clique só.
 
-    def concluir(self, numero: int, por: str | None = None) -> bool:
-        """Marca como atendido e APAGA a ficha guardada e o vínculo com a base de treino:
-        depois do atendimento não há mais reclassificação, então o dado identificado não
-        precisa continuar no disco."""
-        ok = self._mudar(numero, ATENDIDO, "atendido", por, de=(AGUARDANDO, CHAMADO))
-        if ok:
-            with self._trava, self._con:
-                self._con.execute("UPDATE pacientes SET ficha = NULL, caso_id = NULL WHERE numero = ?", (numero,))
-        return ok
-
-    def _mudar(self, numero, novo: str, prefixo: str, por: str | None, de: tuple[str, ...]) -> bool:
+        Por `JANELA_CHAMADA_S` a chamada pode ser desfeita com `devolver` e o QR do paciente
+        mostra "Você foi chamado". Passada a janela, a ficha guardada é apagada."""
         if not isinstance(numero, int) or isinstance(numero, bool):
             return False
-        marcas = ",".join("?" * len(de))
+        agora = self._relogio()
         with self._trava, self._con:
             cur = self._con.execute(
-                f"UPDATE pacientes SET estado = ?, {prefixo}_em = ?, {prefixo}_por = ? "
-                f"WHERE numero = ? AND estado IN ({marcas})",
-                (novo, self._relogio(), por, numero, *de))
+                "UPDATE pacientes SET estado = ?, chamado_em = ?, chamado_por = ?, atendido_em = ?, atendido_por = ? "
+                "WHERE numero = ? AND estado = ?", (ATENDIDO, agora, por, agora, por, numero, AGUARDANDO))
         return cur.rowcount == 1
+
+    def devolver(self, numero: int) -> bool:
+        """Desfaz uma chamada recente (clique errado): o paciente volta para a fila com o mesmo
+        número, QR e hora de chegada. Só vale dentro de `JANELA_CHAMADA_S`."""
+        if not isinstance(numero, int) or isinstance(numero, bool):
+            return False
+        with self._trava, self._con:
+            cur = self._con.execute(
+                "UPDATE pacientes SET estado = ?, chamado_em = NULL, chamado_por = NULL, atendido_em = NULL, "
+                "atendido_por = NULL WHERE numero = ? AND estado = ? AND chamado_em IS NOT NULL AND chamado_em > ?",
+                (AGUARDANDO, numero, ATENDIDO, self._relogio() - JANELA_CHAMADA_S))
+        return cur.rowcount == 1
+
+    def concluir(self, numero: int, por: str | None = None) -> bool:
+        """Retira da fila SEM chamar (desistiu, foi embora). Não pode ser desfeito: o QR deixa de
+        valer e a ficha guardada e o vínculo com a base de treino são apagados na hora."""
+        if not isinstance(numero, int) or isinstance(numero, bool):
+            return False
+        with self._trava, self._con:
+            cur = self._con.execute(
+                "UPDATE pacientes SET estado = ?, atendido_em = ?, atendido_por = ?, ficha = NULL, caso_id = NULL "
+                "WHERE numero = ? AND estado = ?", (ATENDIDO, self._relogio(), por, numero, AGUARDANDO))
+        return cur.rowcount == 1
+
+    def _apagar_fichas_vencidas(self) -> None:
+        """Depois da janela de desfazer, o dado identificado não precisa continuar no disco."""
+        with self._trava, self._con:
+            self._con.execute(
+                "UPDATE pacientes SET ficha = NULL, caso_id = NULL WHERE estado = ? AND atendido_em <= ? "
+                "AND (ficha IS NOT NULL OR caso_id IS NOT NULL)", (ATENDIDO, self._relogio() - JANELA_CHAMADA_S))
+
+    def recem_chamados(self) -> list[dict]:
+        """Chamados dentro da janela de desfazer, do mais recente para o mais antigo."""
+        agora = self._relogio()
+        with self._trava:
+            linhas = self._con.execute(
+                "SELECT numero, cor, chamado_em, chamado_por FROM pacientes WHERE estado = ? "
+                "AND chamado_em IS NOT NULL AND chamado_em > ? ORDER BY chamado_em DESC, numero DESC",
+                (ATENDIDO, agora - JANELA_CHAMADA_S)).fetchall()
+        return [{"numero": p["numero"], "cor": p["cor"], "chamado_por": p["chamado_por"],
+                 "ha_min": int((agora - p["chamado_em"]) // 60)} for p in linhas]
 
     def avisar_piora(self, token: str, motivo: str) -> str:
         """Paciente avisa que piorou. Devolve AVISO_OK, AVISO_ESPERA (aviso recente) ou AVISO_INVALIDO."""
@@ -280,19 +317,15 @@ class Fila:
             "ORDER BY nivel DESC, pontuacao DESC, chegada ASC, numero ASC", (AGUARDANDO,)).fetchall()
 
     def listar(self) -> list[dict]:
-        """Visão do enfermeiro: chamados primeiro, depois a fila em ordem."""
+        """Visão do enfermeiro: quem está aguardando, na ordem de chamada."""
+        self._apagar_fichas_vencidas()
         agora = self._relogio()
         with self._trava:
-            chamados = self._con.execute(
-                "SELECT * FROM pacientes WHERE estado = ? ORDER BY chamado_em", (CHAMADO,)).fetchall()
             fila = self._aguardando()
         avisos: dict[int, list[dict]] = {}
         for a in self.avisos_pendentes():
             avisos.setdefault(a["numero"], []).append({"motivo": a["motivo"], "ha_min": a["ha_min"]})
-        linhas = []
-        for posicao, p in enumerate(fila, start=1):
-            linhas.append(self._linha(p, agora, posicao, avisos))
-        return [self._linha(p, agora, None, avisos) for p in chamados] + linhas
+        return [self._linha(p, agora, posicao, avisos) for posicao, p in enumerate(fila, start=1)]
 
     def _linha(self, p: sqlite3.Row, agora: float, posicao: int | None, avisos: dict) -> dict:
         return {"numero": p["numero"], "cor": p["cor"], "pontuacao": p["pontuacao"],
@@ -303,12 +336,16 @@ class Fila:
                                           if p["reclassificado_em"] is not None else None)}
 
     def status_paciente(self, token: str) -> dict | None:
-        """Visão do paciente. None se o código não existe ou já foi atendido."""
+        """Visão do paciente. None se o código não existe ou deixou de valer (retirado da fila,
+        ou chamado há mais de `JANELA_CHAMADA_S`). Quem acabou de ser chamado vê "chamado"."""
         if not isinstance(token, str) or not FORMATO_TOKEN.match(token):
             return None
         with self._trava:
             p = self._con.execute("SELECT * FROM pacientes WHERE token = ?", (token,)).fetchone()
-            if p is None or p["estado"] == ATENDIDO:
+            if p is None:
+                return None
+            chamado = p["estado"] == ATENDIDO
+            if chamado and (p["chamado_em"] is None or p["chamado_em"] <= self._relogio() - JANELA_CHAMADA_S):
                 return None
             fila = self._aguardando()
             ultimo = self._con.execute(
@@ -327,7 +364,7 @@ class Fila:
             "cor": cor.value,
             "nome_cor": NOME_COR[cor],
             "motivos": json.loads(p["motivos"]),
-            "estado": p["estado"],
+            "estado": CHAMADO if chamado else AGUARDANDO,
             "faixa": faixa(a_frente) if a_frente is not None else None,
             "tempo_alvo_min": carregar_regras()["fila"]["tempos_alvo_minutos"][cor.value],
             "espera_min": int((agora - p["chegada"]) // 60),
