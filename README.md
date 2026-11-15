@@ -141,7 +141,8 @@ Para trocar o modelo ou o endereço do Ollama, copie `.env.example` para `.env` 
 | Variável | Para que serve | Padrão |
 |---|---|---|
 | `TRIAGEM_MODELO` | modelo usado pelo extrator Ollama | `llama3.1:8b` |
-| `TRIAGEM_WHISPER` | modelo de voz (faster-whisper): `base`, `small`, `medium` | `small` |
+| `TRIAGEM_WHISPER` | modelo de voz do relato e reserva (faster-whisper): `base`, `small`, `medium` | `small` |
+| `TRIAGEM_WHISPER_RAPIDO` | modelo de voz das respostas curtas (sim/não, número, opção) | `base` |
 | `OLLAMA_HOST` | endereço do Ollama | `http://127.0.0.1:11434` |
 | `SUPABASE_URL`, `SUPABASE_KEY`, `HF_TOKEN` | reservados; **hoje não são usados** | vazio |
 
@@ -600,7 +601,10 @@ Quem fala é o **enfermeiro**: ele faz a pergunta ao paciente e dita a resposta.
 pip install -r requirements-voz.txt
 ```
 
-Na primeira vez que a interface sobe, o modelo de voz (`small`, cerca de 500 MB) é baixado.
+Na primeira vez que a interface sobe, os dois modelos de voz são baixados: `base` (cerca de
+150 MB), usado nas respostas curtas, e `small` (cerca de 500 MB), usado no relato. Numa máquina
+de teste, a resposta curta caiu de cerca de 1,8 s para 0,7 s com o modelo rápido. Se o rápido não
+entender, o servidor tenta uma vez com o maior antes de responder.
 Depois disso, a voz funciona **sem internet**: o áudio é transcrito nesta máquina, na memória, e
 descartado. Nada é gravado em disco.
 
@@ -610,10 +614,16 @@ O painel **Entrevista por voz**, no topo da aba Triagem, segue esta ordem:
 2. **Relato do paciente** (Q01), ditado. O texto aparece numa caixa editável antes de confirmar.
 3. **Perguntas complementares**: a lista `perguntas_pendentes` do motor, na ordem de prioridade.
 
-Para cada resposta: **Gravar** → **Parar** → o painel mostra "Ouvi: …" e "Entendi: …" →
-**Confirmar** ou **Gravar de novo**. Nada entra na ficha sem o clique em Confirmar. Depois de
-cada confirmação a triagem é recalculada, e um sinal de alerta (cor laranja ou vermelha)
-aparece **na hora**, no topo do painel.
+Para cada resposta: **Falar** (ou a tecla Espaço) → a gravação **para sozinha** quando a fala
+termina → o painel mostra "Ouvi: …" e "Entendi: …" → **Confirmar** (ou Enter). Com a opção
+"Ouvir a próxima pergunta logo depois de confirmar" ligada, o microfone já abre para a pergunta
+seguinte. Também dá para **tocar na resposta** no próprio painel (Sim, Não, 0 a 10, opções), sem
+usar o microfone. Nada entra na ficha sem a confirmação ou o toque do enfermeiro. Depois de cada
+resposta a triagem é recalculada, e um sinal de alerta (cor laranja ou vermelha) aparece **na
+hora**, no topo do painel.
+
+O interpretador aceita o jeito que o modelo costuma escrever um número curto ("Des." vira 10,
+"treis" vira 3). Para o "não" não há variantes aproximadas, de propósito.
 
 A fala vira resposta **por código, sem IA** ([triagem/voz.py](triagem/voz.py)):
 
@@ -647,12 +657,19 @@ O navegador pede permissão para usar o microfone na primeira gravação.
 
 ### Aba Fila
 
-Lista os pacientes chamados e, depois, os que aguardam, na ordem **cor → pontuação → chegada**.
-Mostra posição, número, cor, pontuação, motivo e espera, com os botões **Chamar**,
-**Reclassificar**, **Atendido** e **Ver QR**. Atualiza sozinha a cada 5 segundos. A fila fica
-salva em SQLite ([triagem/fila.py](triagem/fila.py)) e sobrevive a um reinício. A ficha de cada
-paciente também fica guardada nesse arquivo, só nesta máquina, para a reclassificação, e é
-**apagada quando ele é marcado como atendido**.
+Lista quem aguarda, na ordem **cor → pontuação → chegada**, com o **próximo a chamar** em
+destaque no topo. Mostra posição, número, cor, pontuação, motivo e espera, com os botões
+**Chamar**, **Reclassificar**, **Ver QR** e **Retirar**. Atualiza sozinha a cada 5 segundos.
+
+**Chamar já marca o paciente como atendido**: num clique ele sai da fila e o QR dele passa a
+mostrar "Você foi chamado". Por 10 minutos ele aparece em **Chamados há pouco**, com o botão
+**Desfazer** (clique no paciente errado), que o devolve para a fila com o mesmo número, QR e
+hora de chegada. **Retirar** tira da fila sem chamar (desistiu, foi embora), pede confirmação e
+não pode ser desfeito.
+
+A fila fica salva em SQLite ([triagem/fila.py](triagem/fila.py)) e sobrevive a um reinício. A
+ficha de cada paciente também fica guardada nesse arquivo, só nesta máquina, para a
+reclassificação, e é **apagada 10 minutos depois da chamada** (ou na hora, ao retirar).
 
 **Reclassificar** leva a ficha guardada de volta para a aba Triagem, com um aviso azul no topo.
 O enfermeiro ajusta as respostas (digitando ou por voz) e clica em **Atualizar classificação**:
@@ -690,8 +707,8 @@ texto livre. O aviso:
 O paciente vê se a equipe já viu o aviso.
 
 **Não mostra** a pontuação, a posição exata nem nada de outros pacientes. A página se recarrega
-sozinha a cada 20 segundos e não usa JavaScript. Quando o paciente é marcado como atendido, o
-código deixa de valer.
+sozinha a cada 20 segundos e não usa JavaScript. Quando o paciente é chamado, a página
+mostra "Você foi chamado" por 10 minutos e depois o código deixa de valer.
 
 Os tempos-alvo (vermelho imediato, laranja 10 min, amarelo 60, verde 120, azul 240) são os de
 referência do Protocolo de Manchester e ficam em `fila.tempos_alvo_minutos` no

@@ -499,10 +499,11 @@ function mostrarSaida(s) {
 
 /* ---------------------------------------------------------------- entrevista por voz */
 // O enfermeiro fala; o servidor transcreve na máquina e interpreta por código. Nada entra na
-// ficha sem o enfermeiro clicar em "Confirmar". Ordem: segurança -> relato -> pendências.
+// ficha sem o enfermeiro confirmar (Enter, botão ou toque direto na resposta).
+// Ordem: segurança -> relato -> pendências. A gravação para sozinha quando a fala termina.
 
-const voz = { pulados: new Set(), chave: null, gravador: null, pedacos: [], ocupado: false, resultado: null, limite: null };
-const FASES = ['Perguntas de segurança', 'Relato do paciente', 'Perguntas complementares'];
+const voz = { pulados: new Set(), chave: null, gravador: null, pedacos: [], ocupado: false, resultado: null, limite: null, seguir: true, soltar: null };
+const FASES = ['Segurança', 'Relato', 'Complementares'];
 
 function partesPendentes(id) {
   const c = estado.perguntas[id];
@@ -514,22 +515,26 @@ function partesPendentes(id) {
   }).map((i) => i.parte.nome);
 }
 
-function proximoPasso() {
+function passosPendentes() {
   const q = estado.dados;
   const fases = [
     q.perguntas.filter((p) => p.obrigatoriedade === 'S').map((p) => p.id),
     ['Q01'],
     estado.saida ? estado.saida.perguntas_pendentes : [],
   ];
+  const passos = [], vistos = new Set();
   for (const [fase, ids] of fases.entries()) {
     for (const id of ids) {
       if (estado.perguntas[id].el.classList.contains('inativa')) continue; // não se aplica ao paciente
       for (const parte of partesPendentes(id)) {
-        if (!voz.pulados.has(`${id}.${parte}`)) return { fase, id, parte };
+        const chave = `${id}.${parte}`;
+        if (voz.pulados.has(chave) || vistos.has(chave)) continue;
+        vistos.add(chave);
+        passos.push({ fase, id, parte });
       }
     }
   }
-  return null;
+  return passos;
 }
 
 function dicaDaParte(parte) {
@@ -559,23 +564,54 @@ function aplicarValor(id, nomeParte, v) {
   else c.partes[nomeParte].set(v);
 }
 
+// Para a gravação sozinha: depois que alguém falou, `espera` ms de silêncio encerram.
+// O limiar acompanha o ruído do ambiente (sala cheia), medido no começo da gravação.
+function vigiarSilencio(fluxo, rec, espera) {
+  let ctx;
+  try { ctx = new AudioContext(); } catch (e) { return () => {}; }
+  const analisador = ctx.createAnalyser();
+  analisador.fftSize = 1024;
+  ctx.createMediaStreamSource(fluxo).connect(analisador);
+  const amostras = new Uint8Array(analisador.fftSize);
+  const inicio = performance.now();
+  let piso = 1, falou = false, ultimoSom = inicio;
+  const id = setInterval(() => {
+    analisador.getByteTimeDomainData(amostras);
+    let soma = 0;
+    for (const a of amostras) { const x = (a - 128) / 128; soma += x * x; }
+    const volume = Math.sqrt(soma / amostras.length);
+    const agora = performance.now();
+    if (agora - inicio < 250) piso = Math.min(piso, volume);
+    const limiar = Math.max(0.02, Math.min(piso, 0.08) * 2.5);
+    const barra = document.querySelector('#voz-nivel span');
+    if (barra) barra.style.width = `${Math.min(100, Math.round(volume * 500))}%`;
+    if (volume > limiar) { falou = true; ultimoSom = agora; }
+    else if (falou && agora - ultimoSom > espera && rec.state === 'recording') rec.stop();
+  }, 60);
+  return () => { clearInterval(id); ctx.close().catch(() => {}); };
+}
+
 async function alternarGravacao() {
   if (voz.gravador && voz.gravador.state === 'recording') { voz.gravador.stop(); return; }
+  if (voz.ocupado || !voz.passo) return;
   let fluxo;
   try {
-    fluxo = await navigator.mediaDevices.getUserMedia({ audio: true });
+    fluxo = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, channelCount: 1 } });
   } catch (e) {
     voz.resultado = { erro: `Não foi possível usar o microfone (${e.message}). Autorize o microfone no navegador.` };
     renderVoz();
     return;
   }
   const passo = voz.passo;
-  const rec = new MediaRecorder(fluxo);
+  const parte = estado.perguntas[passo.id].partes[passo.parte].parte;
+  const longa = parte.forma === 'texto';
+  const rec = new MediaRecorder(fluxo, { audioBitsPerSecond: 32000 });
   voz.pedacos = [];
   rec.ondataavailable = (ev) => { if (ev.data.size) voz.pedacos.push(ev.data); };
   rec.onstop = () => {
     fluxo.getTracks().forEach((t) => t.stop());
     clearTimeout(voz.limite);
+    if (voz.soltar) { voz.soltar(); voz.soltar = null; }
     const blob = new Blob(voz.pedacos, { type: rec.mimeType || 'audio/webm' });
     voz.pedacos = [];
     enviarAudio(passo, blob);
@@ -583,8 +619,8 @@ async function alternarGravacao() {
   voz.gravador = rec;
   voz.resultado = null;
   rec.start();
-  const parte = estado.perguntas[passo.id].partes[passo.parte].parte;
-  voz.limite = setTimeout(() => { if (rec.state === 'recording') rec.stop(); }, parte.forma === 'texto' ? 90000 : 20000);
+  voz.soltar = vigiarSilencio(fluxo, rec, longa ? 2500 : 800);
+  voz.limite = setTimeout(() => { if (rec.state === 'recording') rec.stop(); }, longa ? 90000 : 15000);
   renderVoz();
 }
 
@@ -610,6 +646,44 @@ async function confirmarVoz(valor) {
   voz.resultado = null;
   await calcular(); // recalcula na hora: alerta de sinal grave aparece já
   renderVoz();
+  if (voz.seguir && voz.passo) alternarGravacao(); // já ouve a próxima pergunta
+}
+
+// toque direto na resposta, sem passar pelo microfone
+async function responderRapido(passo, valor) {
+  if (voz.gravador && voz.gravador.state === 'recording') return;
+  aplicarValor(passo.id, passo.parte, valor);
+  voz.resultado = null;
+  await calcular();
+  renderVoz();
+}
+
+function atalhosDaParte(passo, parte) {
+  const b = (texto, v, classe = '') => h('button', { type: 'button', class: `opcao ${classe}`.trim(), texto, onclick: () => responderRapido(passo, v) });
+  const duvida = [b('Não sabe', 'nao_sabe', 'marcador'), b('Recusou', 'recusou', 'marcador')];
+  switch (parte.forma) {
+    case 'sim_nao': return [b('Sim', true), b('Não', false), ...duvida];
+    case 'escala': return [...Array.from({ length: 11 }, (_, i) => b(String(i), i, 'num')), ...duvida];
+    case 'opcao': return [...parte.opcoes.map((o) => b(rotulo(o), o)), ...duvida];
+    default: return duvida;
+  }
+}
+
+function resultadoPendente() {
+  const r = voz.resultado;
+  return r && !r.erro && r.passo && `${r.passo.id}.${r.passo.parte}` === voz.chave ? r : null;
+}
+
+function teclaDeVoz(ev) {
+  if (ev.ctrlKey || ev.altKey || ev.metaKey || ev.repeat) return;
+  if ($('#tela-triagem').hidden || $('#janela-qr').open || !estado.dados || !estado.dados.voz || !voz.passo) return;
+  if (ev.target.closest && ev.target.closest('input, textarea, select, button, summary, a')) return;
+  if (ev.code === 'Space') { ev.preventDefault(); alternarGravacao(); }
+  else if (ev.key === 'Enter') {
+    const r = resultadoPendente();
+    const forma = estado.perguntas[voz.passo.id].partes[voz.passo.parte].parte.forma;
+    if (r && r.entendido && forma !== 'texto') { ev.preventDefault(); confirmarVoz(r.valor); } // o relato é revisado na caixa de texto
+  }
 }
 
 function renderVoz() {
@@ -621,61 +695,76 @@ function renderVoz() {
     return;
   }
   if (estado.campos.idade.get() === undefined) {
-    caixa.replaceChildren(titulo, h('p', { class: 'dica', texto: 'Preencha a idade e as aferições no cadastro abaixo para começar. Depois, a entrevista segue por voz: segurança, relato e perguntas complementares.' }));
+    voz.passo = null;
+    caixa.replaceChildren(titulo, h('p', { class: 'dica', texto: 'Preencha a idade no cadastro abaixo para começar. Depois a entrevista segue por voz: segurança, relato e perguntas complementares.' }));
     return;
   }
-  const filhos = [titulo];
+  const passos = passosPendentes();
+  const passo = passos[0] || null;
+  const chave = passo ? `${passo.id}.${passo.parte}` : null;
+  if (chave !== voz.chave) { voz.chave = chave; if (voz.resultado && voz.resultado.erro) voz.resultado = null; }
+  voz.passo = passo;
+  const faseAtual = passo ? passo.fase : FASES.length;
+  const filhos = [h('div', { class: 'voz-topo' }, titulo,
+    h('ol', { class: 'etapas', 'aria-label': 'Etapas da entrevista' }, FASES.map((nome, i) => h('li', {
+      class: i < faseAtual ? 'feita' : i === faseAtual ? 'atual' : '', 'aria-current': i === faseAtual ? 'step' : null, texto: `${i + 1}. ${nome}`,
+    }))),
+    passo ? h('span', { class: 'chip neutro', texto: passos.length === 1 ? 'falta 1 resposta' : `faltam ${passos.length} respostas` }) : null)];
   const graves = (estado.saida ? estado.saida.alertas : []).filter((a) => a.codigo === 'sinal_de_alerta');
   if (graves.length) {
     filhos.push(h('div', { class: 'alerta grave', role: 'alert' }, h('span', { class: 'cod', texto: 'Sinal de alerta' }),
       graves.map((a) => h('span', { texto: a.mensagem }))));
   }
-  const passo = proximoPasso();
-  const chave = passo ? `${passo.id}.${passo.parte}` : null;
-  if (chave !== voz.chave) { voz.chave = chave; if (voz.resultado && voz.resultado.erro) voz.resultado = null; }
-  voz.passo = passo;
   if (!passo) {
-    filhos.push(h('p', { texto: 'Entrevista por voz concluída. Revise a ficha e clique em "Colocar na fila".' }));
-    if (voz.pulados.size) filhos.push(h('button', { type: 'button', class: 'pilula secundaria', texto: `Voltar às ${voz.pulados.size} pulada(s)`, onclick() { voz.pulados.clear(); renderVoz(); } }));
+    filhos.push(h('p', { class: 'voz-fim', texto: 'Entrevista concluída. Revise o resultado ao lado e clique em "Colocar na fila".' }));
+    if (voz.pulados.size) filhos.push(h('div', { class: 'controles' }, h('button', { type: 'button', class: 'pilula secundaria', texto: `Voltar às ${voz.pulados.size} pulada(s)`, onclick() { voz.pulados.clear(); renderVoz(); } })));
     caixa.replaceChildren(...filhos);
     return;
   }
   const p = estado.dados.perguntas.find((x) => x.id === passo.id);
   const parte = p.partes.find((x) => x.nome === passo.parte);
-  const gravando = voz.gravador && voz.gravador.state === 'recording';
+  const gravando = Boolean(voz.gravador && voz.gravador.state === 'recording');
   filhos.push(
-    h('p', { class: 'rotulo-secao', texto: `Etapa ${passo.fase + 1} de 3 · ${FASES[passo.fase]}` }),
     h('div', { class: 'voz-pergunta' }, h('span', { class: 'id', texto: p.id }),
       h('div', {}, h('p', { class: 'texto', texto: p.texto }),
-        p.partes.length > 1 ? h('p', { class: 'parte-voz', texto: `Agora: ${PARTES[parte.nome] ?? humanizar(parte.nome)}` }) : null,
+        p.partes.length > 1 && parte.nome !== 'resposta' ? h('p', { class: 'parte-voz', texto: `Agora: ${PARTES[parte.nome] ?? humanizar(parte.nome)}` }) : null,
         h('p', { class: 'dica', texto: dicaDaParte(parte) }))),
-    h('div', { class: 'controles' },
+    h('div', { class: 'voz-acao' },
       h('button', { type: 'button', class: 'pilula gravar', 'aria-pressed': String(gravando), disabled: voz.ocupado,
-        texto: gravando ? '■ Parar e transcrever' : '● Gravar resposta', onclick: alternarGravacao }),
-      h('button', { type: 'button', class: 'pilula secundaria', texto: 'Pular', disabled: gravando || voz.ocupado,
-        onclick() { voz.pulados.add(chave); voz.resultado = null; renderVoz(); } }),
-      h('button', { type: 'button', class: 'pilula secundaria', texto: 'Responder na ficha', onclick: () => irParaPergunta(p.id) })));
-  if (gravando) filhos.push(h('p', { class: 'gravando', texto: 'Gravando… fale a resposta e clique em "Parar".' }));
-  if (voz.ocupado) filhos.push(h('p', { class: 'dica', texto: 'Transcrevendo nesta máquina…' }));
+        texto: gravando ? '■ Parar' : voz.ocupado ? 'Transcrevendo…' : '● Falar', onclick: alternarGravacao }),
+      gravando
+        ? h('div', { class: 'voz-estado' }, h('p', { class: 'gravando', texto: 'Ouvindo… paro sozinho quando você terminar de falar.' }),
+          h('div', { class: 'nivel', id: 'voz-nivel', 'aria-hidden': 'true' }, h('span', {})))
+        : h('p', { class: 'dica voz-estado', texto: voz.ocupado ? 'Transcrevendo nesta máquina…' : 'Atalhos: Espaço fala ou para · Enter confirma.' })));
   const r = voz.resultado;
   if (r && r.erro) filhos.push(h('p', { class: 'alerta atencao', texto: r.erro }));
-  else if (r && r.passo && `${r.passo.id}.${r.passo.parte}` === chave) {
-    const ouvi = h('p', {}, h('strong', { texto: 'Ouvi: ' }), `“${r.transcricao || '(nada)'}”`);
+  else if (resultadoPendente()) {
+    const ouvi = h('p', { class: 'ouvi' }, h('strong', { texto: 'Ouvi: ' }), `“${r.transcricao || '(nada)'}”`);
     if (r.entendido && parte.forma === 'texto') {
       const area = h('textarea', { rows: '4', maxlength: String(parte.max_caracteres ?? 1000), 'aria-label': 'Texto transcrito' });
       area.value = r.valor;
       filhos.push(h('div', { class: 'voz-resultado' }, ouvi, area,
         h('div', { class: 'controles' }, h('button', { type: 'button', class: 'pilula', texto: 'Confirmar', onclick: () => confirmarVoz(area.value.trim()) }),
-          h('button', { type: 'button', class: 'pilula secundaria', texto: 'Gravar de novo', onclick: alternarGravacao }))));
+          h('button', { type: 'button', class: 'pilula secundaria', texto: 'Falar de novo', onclick: alternarGravacao }))));
     } else if (r.entendido) {
-      filhos.push(h('div', { class: 'voz-resultado' }, ouvi, h('p', { class: 'entendi' }, h('strong', { texto: 'Entendi: ' }), textoDoValor(r.valor)),
-        h('div', { class: 'controles' }, h('button', { type: 'button', class: 'pilula', texto: 'Confirmar', onclick: () => confirmarVoz(r.valor) }),
-          h('button', { type: 'button', class: 'pilula secundaria', texto: 'Gravar de novo', onclick: alternarGravacao }))));
+      filhos.push(h('div', { class: 'voz-resultado entendido' }, ouvi, h('p', { class: 'entendi' }, h('strong', { texto: 'Entendi: ' }), textoDoValor(r.valor)),
+        h('div', { class: 'controles' }, h('button', { type: 'button', class: 'pilula', texto: 'Confirmar (Enter)', onclick: () => confirmarVoz(r.valor) }),
+          h('button', { type: 'button', class: 'pilula secundaria', texto: 'Falar de novo', onclick: alternarGravacao }))));
     } else {
       filhos.push(h('div', { class: 'voz-resultado' }, ouvi,
-        h('p', { class: 'alerta atencao', texto: `Não entendi (${r.motivo}). Grave de novo ou responda na ficha.` })));
+        h('p', { class: 'alerta atencao', texto: `Não entendi (${r.motivo}). Fale de novo ou toque na resposta abaixo.` })));
     }
   }
+  const seguir = h('input', { type: 'checkbox', onchange(ev) { voz.seguir = ev.target.checked; } });
+  seguir.checked = voz.seguir;
+  filhos.push(
+    h('div', { class: 'voz-atalhos' }, h('span', { class: 'rotulo-secao', texto: 'Ou toque na resposta' }),
+      h('div', { class: 'opcoes' }, atalhosDaParte(passo, parte))),
+    h('div', { class: 'controles voz-rodape' },
+      h('button', { type: 'button', class: 'pilula secundaria', texto: 'Pular', disabled: gravando || voz.ocupado,
+        onclick() { voz.pulados.add(chave); voz.resultado = null; renderVoz(); } }),
+      h('button', { type: 'button', class: 'pilula secundaria', texto: 'Ver na ficha', onclick: () => irParaPergunta(p.id) }),
+      h('label', { class: 'check' }, seguir, ' Ouvir a próxima pergunta logo depois de confirmar')));
   caixa.replaceChildren(...filhos);
 }
 
@@ -835,24 +924,64 @@ function mostrarAvisos(avisos) {
       h('button', { type: 'button', class: 'pilula', texto: 'Vi o aviso', onclick: () => acaoFila('/api/fila/aviso-visto', a.numero) })))));
 }
 
+const haMin = (m) => (m ? `há ${m} min` : 'agora');
+
+async function chamarPaciente(numero) {
+  // um clique: o paciente é chamado e já sai da fila como atendido (dá para desfazer por 10 min)
+  await acaoFila('/api/fila/chamar', numero);
+}
+
+function retirarPaciente(numero) {
+  if (window.confirm(`Retirar o paciente ${numeroFila(numero)} da fila SEM chamar (desistiu ou foi embora)?\n\nNão dá para desfazer e o QR dele deixa de valer.`)) {
+    acaoFila('/api/fila/concluir', numero);
+  }
+}
+
 function linhaFila(p) {
   const acoes = [];
   if (p.avisos_piora.length) acoes.push(h('button', { type: 'button', class: 'pilula', texto: 'Vi o aviso', onclick: () => acaoFila('/api/fila/aviso-visto', p.numero) }));
-  if (p.estado === 'aguardando') acoes.push(h('button', { type: 'button', class: 'pilula', texto: 'Chamar', onclick: () => acaoFila('/api/fila/chamar', p.numero) }));
+  acoes.push(h('button', { type: 'button', class: 'pilula', texto: 'Chamar', title: 'Chama e já marca como atendido', onclick: () => chamarPaciente(p.numero) }));
   acoes.push(h('button', { type: 'button', class: 'pilula secundaria', texto: 'Reclassificar', onclick: () => iniciarReclassificacao(p.numero) }));
-  acoes.push(h('button', { type: 'button', class: 'pilula secundaria', texto: 'Atendido', onclick: () => acaoFila('/api/fila/concluir', p.numero) }));
   acoes.push(h('button', { type: 'button', class: 'pilula secundaria', texto: 'Ver QR', onclick: () => acaoFila('/api/fila/qr', p.numero) }));
-  return h('tr', { class: [p.estado === 'chamado' ? 'chamado' : '', p.avisos_piora.length ? 'piorou' : ''].join(' ').trim() },
-    h('td', { class: 'num', texto: p.posicao ? `${p.posicao}º` : 'chamado' }),
-    h('td', { class: 'num', texto: numeroFila(p.numero) }),
+  acoes.push(h('button', { type: 'button', class: 'pilula discreta', texto: 'Retirar', title: 'Retira da fila sem chamar', onclick: () => retirarPaciente(p.numero) }));
+  return h('tr', { class: p.avisos_piora.length ? 'piorou' : '' },
+    h('td', { class: 'num', texto: `${p.posicao}º` }),
+    h('td', { class: 'num grande', texto: numeroFila(p.numero) }),
     h('td', {}, h('span', { class: `cor-chip cor-${p.cor}`, texto: CORES[p.cor] ?? p.cor })),
     h('td', { class: 'num', texto: String(p.pontuacao) }),
     h('td', { class: 'col-motivos' },
-      p.avisos_piora.map((a) => h('p', { class: 'piorou-texto', texto: `Piorou: ${a.motivo} · ${a.ha_min ? `há ${a.ha_min} min` : 'agora'}` })),
-      p.reclassificado_ha_min !== null ? h('p', { class: 'dica', texto: `Reclassificado ${p.reclassificado_ha_min ? `há ${p.reclassificado_ha_min} min` : 'agora'}` }) : null,
+      p.avisos_piora.map((a) => h('p', { class: 'piorou-texto', texto: `Piorou: ${a.motivo} · ${haMin(a.ha_min)}` })),
+      p.reclassificado_ha_min !== null ? h('p', { class: 'dica', texto: `Reclassificado ${haMin(p.reclassificado_ha_min)}` }) : null,
       h('ul', { class: 'motivos-fila' }, p.motivos.map((m) => h('li', { texto: m })))),
     h('td', { texto: `${p.espera_min} min` }),
     h('td', { class: 'col-acoes' }, h('div', { class: 'acoes' }, acoes)));
+}
+
+function resumoFila(pacientes) {
+  const porCor = {};
+  for (const p of pacientes) porCor[p.cor] = (porCor[p.cor] || 0) + 1;
+  return Object.keys(CORES).filter((c) => porCor[c]).map((c) => h('span', { class: `cor-chip cor-${c}`, texto: `${CORES[c]} · ${porCor[c]}` }));
+}
+
+function cartaoProximo(p) {
+  return h('div', { class: `proximo borda-${p.cor}` },
+    h('div', { class: 'proximo-quem' },
+      h('span', { class: 'rotulo-secao', texto: 'Próximo a chamar' }),
+      h('span', { class: 'numero-grande', texto: numeroFila(p.numero) }),
+      h('span', { class: `cor-chip cor-${p.cor}`, texto: CORES[p.cor] ?? p.cor }),
+      h('span', { class: 'dica', texto: `esperando há ${p.espera_min} min` })),
+    h('button', { type: 'button', class: 'pilula enorme', texto: `Chamar ${numeroFila(p.numero)}`, onclick: () => chamarPaciente(p.numero) }),
+    h('p', { class: 'dica proximo-nota', texto: 'Ao chamar, o paciente já é marcado como atendido e sai da fila.' }));
+}
+
+function listaRecemChamados(lista) {
+  if (!lista.length) return [];
+  return [h('h3', { texto: 'Chamados há pouco' }),
+    h('ul', { class: 'recem' }, lista.map((c) => h('li', {},
+      h('span', { class: `cor-chip cor-${c.cor}`, texto: numeroFila(c.numero) }),
+      h('span', { texto: `chamado ${haMin(c.ha_min)}${c.chamado_por ? ` por ${c.chamado_por}` : ''} · atendido` }),
+      h('button', { type: 'button', class: 'pilula secundaria', texto: 'Desfazer', title: 'Volta para a fila, na mesma posição', onclick: () => acaoFila('/api/fila/devolver', c.numero) })))),
+    h('p', { class: 'dica', texto: 'Clicou no paciente errado? "Desfazer" devolve para a fila com o mesmo número e QR. Vale por 10 minutos.' })];
 }
 
 async function carregarFila() {
@@ -864,16 +993,19 @@ async function carregarFila() {
     return;
   }
   mostrarAvisos(dados.avisos);
-  const aguardando = dados.pacientes.filter((p) => p.estado === 'aguardando').length;
-  $('#contador-fila').textContent = String(aguardando);
+  const pacientes = dados.pacientes;
+  $('#contador-fila').textContent = String(pacientes.length);
   $('#aviso-paciente').textContent = dados.pagina_paciente
     ? 'Página do paciente ligada: cada paciente recebe um QR para acompanhar a fila pelo celular, no Wi-Fi da unidade.'
     : 'Página do paciente desligada: a fila funciona, mas sem QR.';
-  $('#lista-fila').replaceChildren(dados.pacientes.length
+  $('#resumo-fila').replaceChildren(h('span', { class: 'total-fila', texto: pacientes.length === 1 ? '1 pessoa aguardando' : `${pacientes.length} pessoas aguardando` }), ...resumoFila(pacientes));
+  $('#proximo-fila').replaceChildren(...(pacientes.length ? [cartaoProximo(pacientes[0])] : []));
+  $('#lista-fila').replaceChildren(pacientes.length
     ? h('table', { class: 'tabela-fila' },
       h('thead', {}, h('tr', {}, ['Posição', 'Número', 'Cor', 'Pontuação', 'Motivo', 'Espera', 'Ações'].map((t) => h('th', { texto: t })))),
-      h('tbody', {}, dados.pacientes.map(linhaFila)))
-    : h('p', { class: 'dica', texto: 'Ninguém na fila. Depois da triagem, clique em "Colocar na fila".' }));
+      h('tbody', {}, pacientes.map(linhaFila)))
+    : h('p', { class: 'vazio-fila', texto: 'Ninguém na fila. Depois da triagem, clique em "Colocar na fila".' }));
+  $('#recem-chamados').replaceChildren(...listaRecemChamados(dados.recem_chamados || []));
 }
 
 /* ---------------------------------------------------------------- início */
@@ -884,6 +1016,7 @@ function textoExtrator() {
     ? 'Leitura por palavras-chave, sem rede. Atualiza enquanto você digita.'
     : 'Usa o modelo local (Ollama). Pode levar de 10 a 120 segundos na primeira vez; clique em "Analisar". Se o modelo estiver fora do ar, a ficha sai só com as respostas diretas.';
   $('#auto').disabled = e !== 'mock';
+  $('#analisar').hidden = e === 'mock' && $('#auto').checked;
 }
 
 async function iniciar() {
@@ -918,8 +1051,9 @@ async function iniciar() {
   $('#limpar').addEventListener('click', novaFicha);
   $('#analisar').addEventListener('click', () => { clearTimeout(estado.timer); calcular(); });
   $('#extrator').addEventListener('change', () => { textoExtrator(); agendar(); });
-  $('#auto').addEventListener('change', agendar);
+  $('#auto').addEventListener('change', () => { textoExtrator(); agendar(); });
 
+  document.addEventListener('keydown', teclaDeVoz);
   $('#aba-triagem').addEventListener('click', () => mostrarTela('triagem'));
   $('#aba-fila').addEventListener('click', () => mostrarTela('fila'));
   $('#qr-fechar').addEventListener('click', () => $('#janela-qr').close());

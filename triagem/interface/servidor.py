@@ -11,8 +11,9 @@ Escuta apenas em 127.0.0.1 e serve:
   POST /api/fila              {"ficha": {...}, "extrator": "mock"} -> {"numero", "url", "qr"}
                               (a ficha é processada de novo aqui; o navegador não manda a cor)
   POST /api/fila/qr           {"numero": 7} -> {"numero", "url", "qr"} (mostrar o QR de novo)
-  POST /api/fila/chamar       {"numero": 7}
-  POST /api/fila/concluir     {"numero": 7} (o código do QR deixa de valer)
+  POST /api/fila/chamar       {"numero": 7} (chama e já marca como atendido)
+  POST /api/fila/devolver     {"numero": 7} (desfaz uma chamada recente)
+  POST /api/fila/concluir     {"numero": 7} (retira da fila sem chamar; o QR deixa de valer)
   POST /api/fila/aviso-visto  {"numero": 7} (o enfermeiro viu o aviso de piora do paciente)
   POST /api/fila/ficha        {"numero": 7} -> a ficha guardada, para reclassificar
   POST /api/fila/reclassificar {"numero": 7, "ficha": {...}, "extrator": "mock", "confirmar_reducao": false}
@@ -53,7 +54,8 @@ from triagem.regras import carregar_regras
 from triagem.schema import Classificacao
 from triagem.treino import BaseTreino
 from triagem.usuarios import SESSAO_MAX_S, Usuarios
-from triagem.voz import ErroVoz, Transcritor, TranscritorWhisper, interpretar_fala, whisper_instalado
+from triagem.voz import (ErroVoz, Transcritor, TranscritorWhisper, dica_da_parte, forma_curta, interpretar_fala,
+                         whisper_instalado)
 
 log = logging.getLogger("triagem.interface")
 
@@ -98,13 +100,20 @@ def ouvir(transcritor: Transcritor | None, pergunta_id: str, nome_parte: str, au
     parte = next((x for x in (pergunta or {}).get("partes", []) if x["nome"] == nome_parte), None)
     if parte is None:
         return 400, {"erros": [f"pergunta ou parte desconhecida: {pergunta_id!r} / {nome_parte!r}"]}
+    curta, dica = forma_curta(parte), dica_da_parte(parte)
     try:
-        texto = transcritor.transcrever(audio)
-    except ErroVoz as e:
-        return 422, {"erros": [str(e)]}
+        texto = transcritor.transcrever(audio, curta=curta, dica=dica)
+        e = interpretar_fala(parte, texto)
+        if not e.entendido and curta and transcritor.tem_reserva:
+            # o modelo rápido não deu uma resposta aproveitável: tenta uma vez com o maior
+            texto2 = transcritor.transcrever(audio, curta=True, dica=dica, preciso=True)
+            e2 = interpretar_fala(parte, texto2)
+            if e2.entendido:
+                texto, e = texto2, e2
+    except ErroVoz as erro:
+        return 422, {"erros": [str(erro)]}
     finally:
         del audio  # o áudio não é guardado em lugar nenhum
-    e = interpretar_fala(parte, texto)
     return 200, {"pergunta": pergunta_id, "parte": nome_parte, "transcricao": texto,
                  "valor": e.valor, "entendido": e.entendido, "motivo": e.motivo}
 
@@ -296,6 +305,7 @@ class Manipulador(BaseHTTPRequestHandler):
         if caminho == "/api/fila":
             pacientes = [{k: v for k, v in p.items() if k != "token"} for p in self.server.fila.listar()]
             return self._json(200, {"pacientes": pacientes, "avisos": self.server.fila.avisos_pendentes(),
+                                    "recem_chamados": self.server.fila.recem_chamados(),
                                     "pagina_paciente": bool(self.server.url_paciente)})
         self._erro(HTTPStatus.NOT_FOUND, "não encontrado")
 
@@ -419,6 +429,11 @@ class Manipulador(BaseHTTPRequestHandler):
             return 200, {"ok": True}
         return 404, {"erros": ["paciente não está aguardando"]}
 
+    def _fila_devolver(self, corpo: dict) -> tuple[int, dict]:
+        if self.server.fila.devolver(self._numero(corpo)):
+            return 200, {"ok": True}
+        return 404, {"erros": ["a chamada não pode mais ser desfeita"]}
+
     def _fila_concluir(self, corpo: dict) -> tuple[int, dict]:
         if self.server.fila.concluir(self._numero(corpo), por=self._por):
             return 200, {"ok": True}
@@ -447,6 +462,7 @@ class Manipulador(BaseHTTPRequestHandler):
 
 ROTAS_POST = {"/api/triagem": "_triagem", "/api/fila": "_fila_entrar", "/api/fila/qr": "_fila_qr",
               "/api/fila/chamar": "_fila_chamar", "/api/fila/concluir": "_fila_concluir",
+              "/api/fila/devolver": "_fila_devolver",
               "/api/fila/aviso-visto": "_fila_aviso_visto", "/api/fila/ficha": "_fila_ficha",
               "/api/fila/reclassificar": "_fila_reclassificar"}
 

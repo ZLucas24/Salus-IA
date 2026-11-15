@@ -13,8 +13,7 @@
 
   <div class="faixa" role="note">
     <strong>Protótipo com dados simulados.</strong>
-    As regras de cor e pontuação são propostas da equipe e <strong>ainda não foram validadas por profissional de saúde</strong>.
-    A decisão final é sempre do profissional.
+    Regras de cor e pontuação <strong>ainda não validadas por profissional de saúde</strong>. A decisão final é sempre do profissional.
   </div>
 
   <header class="topo">
@@ -47,11 +46,13 @@
     <div class="cartao">
       <div class="controles entre">
         <h2 id="titulo-fila">Fila de atendimento</h2>
-        <p class="dica">Ordem: cor, depois pontuação, depois chegada. Atualiza sozinha.</p>
+        <div class="resumo-fila" id="resumo-fila"></div>
       </div>
-      <p class="dica" id="aviso-paciente"></p>
+      <div id="proximo-fila"></div>
       <div id="lista-fila" aria-live="polite"></div>
+      <p class="dica">Ordem: cor, depois pontuação, depois chegada. Atualiza sozinha. <span id="aviso-paciente"></span></p>
     </div>
+    <div class="cartao recem-cartao" id="recem-chamados" aria-live="polite"></div>
   </section>
 
   <dialog id="janela-qr" aria-labelledby="titulo-qr">
@@ -71,21 +72,26 @@
   <main class="layout" id="tela-triagem">
     <section class="coluna" aria-labelledby="titulo-entrevista">
       <div class="cartao barra">
-        <h2 id="titulo-entrevista">Entrevista</h2>
-        <div class="controles">
-          <label class="campo-inline">Exemplo
-            <select id="exemplo"><option value="">Carregar um exemplo…</option></select>
-          </label>
-          <button type="button" class="pilula secundaria" id="limpar">Limpar ficha</button>
+        <div class="controles entre">
+          <h2 id="titulo-entrevista">Nova triagem</h2>
+          <div class="controles">
+            <button type="button" class="pilula" id="analisar">Analisar</button>
+            <button type="button" class="pilula secundaria" id="limpar">Limpar ficha</button>
+          </div>
         </div>
-        <div class="controles">
-          <label class="campo-inline">Leitura do relato
-            <select id="extrator"></select>
-          </label>
-          <label class="check"><input type="checkbox" id="auto" checked> Atualizar enquanto digito</label>
-          <button type="button" class="pilula" id="analisar">Analisar</button>
-        </div>
-        <p class="dica" id="dica-extrator"></p>
+        <details class="sub opcoes-demo">
+          <summary>Opções da demonstração</summary>
+          <div class="controles">
+            <label class="campo-inline">Exemplo
+              <select id="exemplo"><option value="">Carregar um exemplo…</option></select>
+            </label>
+            <label class="campo-inline">Leitura do relato
+              <select id="extrator"></select>
+            </label>
+            <label class="check"><input type="checkbox" id="auto" checked> Atualizar enquanto digito</label>
+          </div>
+          <p class="dica" id="dica-extrator"></p>
+        </details>
       </div>
 
       <section class="cartao voz" id="voz" aria-labelledby="titulo-voz" aria-live="polite"></section>

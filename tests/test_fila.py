@@ -4,11 +4,12 @@ import http.client
 import json
 import random
 import threading
+import time
 
 import pytest
 
 from helpers import RAIZ
-from triagem.fila import FAIXAS, Fila, explicacoes, faixa, ordem_das_cores
+from triagem.fila import JANELA_CHAMADA_S, FAIXAS, Fila, explicacoes, faixa, ordem_das_cores
 from triagem.interface.paciente import criar_servidor_paciente
 from triagem.interface.servidor import criar_servidor
 from triagem.regras import RegrasInvalidas, carregar_regras
@@ -125,9 +126,38 @@ def test_codigo_deixa_de_valer_depois_do_atendimento(fila):
     assert fila.chamar(e["numero"])
     s = fila.status_paciente(e["token"])
     assert s["estado"] == "chamado" and s["faixa"] is None
-    assert fila.concluir(e["numero"])
+    assert not fila.concluir(e["numero"]) and not fila.chamar(e["numero"])  # já saiu da fila
+    fila._relogio = lambda: time.time() + JANELA_CHAMADA_S + 1
     assert fila.status_paciente(e["token"]) is None
-    assert not fila.concluir(e["numero"]) and not fila.chamar(e["numero"])
+    b = fila.entrar(cls("verde"))
+    assert fila.concluir(b["numero"]) and fila.status_paciente(b["token"]) is None  # retirado: na hora
+
+
+def test_chamar_ja_marca_como_atendido_e_pode_ser_desfeito(fila):
+    a = fila.entrar(cls("amarelo"), {"dados_atendente": {"idade": 40}, "respostas": {}}, "mock", por="ana")
+    b = fila.entrar(cls("verde"))
+    assert fila.chamar(a["numero"], por="ana")
+    assert [p["numero"] for p in fila.listar()] == [b["numero"]]  # some da fila num clique
+    linha = fila._con.execute("SELECT estado, atendido_em, atendido_por FROM pacientes WHERE numero = ?",
+                              (a["numero"],)).fetchone()
+    assert linha["estado"] == "atendido" and linha["atendido_em"] is not None and linha["atendido_por"] == "ana"
+    assert fila.recem_chamados()[0]["numero"] == a["numero"] and fila.ficha(a["numero"]) is None
+    assert fila.avisar_piora(a["token"], "dor") == AVISO_INVALIDO
+    assert fila.devolver(a["numero"]) and not fila.devolver(a["numero"])
+    assert [p["numero"] for p in fila.listar()] == [a["numero"], b["numero"]]  # mesma posição de antes
+    assert fila.ficha(a["numero"])["ficha"] is not None and fila.recem_chamados() == []
+    assert not fila.devolver(b["numero"]) and not fila.devolver(True)
+
+
+def test_depois_da_janela_a_chamada_nao_volta_e_a_ficha_e_apagada(fila):
+    a = fila.entrar(cls("verde"), {"dados_atendente": {"idade": 40}, "respostas": {"Q01": "relato"}}, "mock")
+    fila.chamar(a["numero"])
+    fila.listar()
+    assert fila._con.execute("SELECT ficha FROM pacientes").fetchone()[0] is not None  # ainda dá para desfazer
+    fila._relogio = lambda: time.time() + JANELA_CHAMADA_S + 1
+    assert not fila.devolver(a["numero"]) and fila.recem_chamados() == []
+    fila.listar()
+    assert tuple(fila._con.execute("SELECT ficha, caso_id FROM pacientes").fetchone()) == (None, None)
 
 
 @pytest.mark.parametrize("numero", [999, True, "1", None, 1.0])
@@ -258,9 +288,13 @@ def test_chamar_concluir_e_qr_de_novo_pela_api(servidores):
     assert chamar(enf, "POST", "/api/fila/chamar", {"numero": r["numero"]})[0] == 404
     caminho = r["url"].split(str(pac.server_address[1]), 1)[1]
     assert b"Voc\xc3\xaa foi chamado" in chamar(pac, "GET", caminho)[1]
+    dados = json.loads(chamar(enf, "GET", "/api/fila")[1])
+    assert dados["pacientes"] == [] and dados["recem_chamados"][0]["numero"] == r["numero"]
+    assert chamar(enf, "POST", "/api/fila/qr", {"numero": r["numero"]})[0] == 404
+    assert chamar(enf, "POST", "/api/fila/devolver", {"numero": r["numero"]})[0] == 200
+    assert chamar(enf, "POST", "/api/fila/devolver", {"numero": r["numero"]})[0] == 404
     assert chamar(enf, "POST", "/api/fila/concluir", {"numero": r["numero"]})[0] == 200
     assert chamar(pac, "GET", caminho)[0] == 404
-    assert chamar(enf, "POST", "/api/fila/qr", {"numero": r["numero"]})[0] == 404
 
 
 def test_pagina_do_paciente(servidores):
