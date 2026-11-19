@@ -296,6 +296,8 @@ A ficha é um JSON com duas partes, `dados_atendente` e `respostas`:
 - Valores impossíveis são recusados como erro de digitação (ex.: temperatura fora de 30–45 °C,
   saturação fora de 0–100 %, Glasgow fora de 3–15). Isso não é limite clínico.
 - Campo desconhecido é erro (evita erro de digitação silencioso).
+- Número tem de ser número no JSON: `"idade": "40"` e `"idade": true` são recusados (antes eram
+  convertidos em silêncio, e `true` virava 1 ano).
 
 ### `respostas`
 
@@ -541,7 +543,9 @@ mostra o comando para criar a primeira.
 - Contas em `usuarios.db` (fora do Git), com senha guardada como **scrypt** com sal, nunca em
   texto. Comandos: `python -m triagem.usuarios criar|listar|desativar|senha`.
 - A sessão fica num cookie `HttpOnly` e `SameSite=Strict` e dura no máximo **12 horas** (um
-  plantão). Sem uso por **1 hora**, pede a senha de novo. Reiniciar a interface desloga todos.
+  plantão). Sem uso por **1 hora**, pede a senha de novo. A fila que se atualiza sozinha na tela
+  **não conta como uso**: com o computador parado, a sessão expira e a tela volta para o login.
+  Reiniciar a interface desloga todos.
 - Depois de **5 senhas erradas** seguidas, o login fica bloqueado por 5 minutos.
 - Desativar a conta ou trocar a senha encerra as sessões abertas dela.
 - Cada ação na fila registra **quem fez**: triagem, chamada, atendimento, reclassificação e
@@ -589,6 +593,7 @@ Sobem dois servidores:
 | `--fila caminho.db` | onde a fila é salva (padrão: `fila.db`, fora do Git) |
 | `--sem-paciente` | não abre a página do paciente na rede; a fila funciona sem QR |
 | `--sem-voz` | desliga a entrevista por voz |
+| `--sem-historico` | desliga a consulta ao histórico do paciente |
 
 Encerre com `Ctrl+C`. Na primeira vez, o Windows pode perguntar se o Python pode usar a rede:
 permita em **rede privada**, senão o celular não alcança a página do paciente.
@@ -604,7 +609,8 @@ pip install -r requirements-voz.txt
 Na primeira vez que a interface sobe, os dois modelos de voz são baixados: `base` (cerca de
 150 MB), usado nas respostas curtas, e `small` (cerca de 500 MB), usado no relato. Numa máquina
 de teste, a resposta curta caiu de cerca de 1,8 s para 0,7 s com o modelo rápido. Se o rápido não
-entender, o servidor tenta uma vez com o maior antes de responder.
+entender, o servidor tenta uma vez com o maior antes de responder. Se o modelo rápido não puder
+ser baixado (máquina sem internet), a voz continua funcionando só com o maior.
 Depois disso, a voz funciona **sem internet**: o áudio é transcrito nesta máquina, na memória, e
 descartado. Nada é gravado em disco.
 
@@ -642,18 +648,71 @@ pede para gravar de novo ou responder na ficha. Com o relato ditado, o limite da
 
 O navegador pede permissão para usar o microfone na primeira gravação.
 
-### Aba Triagem
+### Aba Triagem: três passos
 
-- **Esquerda:** cadastro, aferições e o formulário de entrevista, montado a partir do próprio
-  questionário (segurança, núcleo, módulos e complementares), com botões de "não sabe",
-  "recusou" e "não se aplica".
-- **Direita:** cor e pontuação sugeridas (marcadas como provisórias), alertas, próxima pergunta e
-  pendências (clicáveis), sinais com origem e trecho do relato, alergias, regras aplicadas e o
-  JSON completo.
-- Com o `mock`, o resultado se atualiza enquanto você digita. Com o Ollama, clique em **Analisar**.
-- Há um seletor com as fichas de exemplo, inclusive as que falham de propósito.
-- **Colocar na fila:** gera o número de atendimento e mostra o QR do paciente. O servidor processa
-  a ficha de novo: a cor nunca vem do navegador.
+A triagem segue três passos, mostrados no topo da tela. A cor e a pontuação **só aparecem depois
+da análise**, e o paciente só vai para a fila depois dela.
+
+**1. Ficha.** O enfermeiro preenche o cadastro, as aferições e a entrevista (digitando, tocando
+nas respostas ou por voz). O formulário é montado a partir do próprio questionário (segurança,
+núcleo, módulos e complementares), com botões de "não sabe", "recusou" e "não se aplica". Ao lado
+ficam as perguntas pendentes (clicáveis), os erros da ficha e o histórico do paciente. Neste passo
+não há cor nem pontuação na tela, com uma exceção de segurança: se uma regra de cor laranja ou
+vermelha for acionada, o **sinal de alerta aparece na hora**, no topo, sem esperar a análise.
+
+**2. Análise.** O botão **Analisar** processa a ficha no servidor e mostra a cor e a pontuação
+sugeridas (marcadas como provisórias), os alertas, os padrões do histórico, as pendências, os
+sinais com origem e trecho do relato, as alergias, as regras aplicadas e o JSON completo. Tocar
+numa pergunta pendente volta à ficha, já no lugar dela. Mudou a ficha, precisa analisar de novo.
+
+**3. Fila.** O botão **Colocar na fila** só existe na tela da análise. Ele gera o número de
+atendimento e o QR do paciente, e a ficha é limpa para o próximo (assim o mesmo paciente não
+entra duas vezes). O servidor processa a ficha de novo: a cor nunca vem do navegador.
+
+Detalhes:
+
+- Enquanto a ficha é preenchida, as pendências e o sinal de alerta usam sempre a leitura do
+  relato por **palavras-chave**, que é instantânea. O leitor escolhido em "Opções da
+  demonstração" (por exemplo, o modelo local via Ollama) roda só no **Analisar**.
+- A leitura do relato feita por um modelo fica guardada por 10 minutos, só na memória. A entrada
+  na fila reutiliza exatamente a leitura que estava na tela: não espera o modelo de novo e não
+  corre o risco de registrar uma cor diferente da analisada.
+- Em "Opções da demonstração" há um seletor com as fichas de exemplo, inclusive as que falham de
+  propósito.
+
+### Histórico do paciente
+
+O campo **Prontuário (opcional)**, no cadastro, busca o histórico do paciente enquanto a ficha é
+preenchida. O cartão ao lado mostra alergias registradas, condições, remédios em uso e os
+atendimentos anteriores, e **cruza o histórico com a ficha de hoje**:
+
+| Padrão | Quando aparece |
+|---|---|
+| Retorno em pouco tempo | o último atendimento foi há até 3 dias |
+| Vindas repetidas | 2 ou mais atendimentos nos últimos 30 dias ("3ª vinda em 30 dias") |
+| Mesma queixa de antes | a queixa de hoje já apareceu; lista o diagnóstico **registrado** naqueles atendimentos |
+| Alergia registrada | o histórico tem uma alergia que não está na ficha de hoje |
+| Histórico e ficha divergem | o histórico registra anticoagulante, insulina ou doença crônica não confirmados hoje |
+
+Regras deste recurso ([triagem/historico.py](triagem/historico.py)):
+
+- O cruzamento é **regra em código, sem IA**. É um aviso para o enfermeiro e o médico: **não é
+  diagnóstico** e **não muda a cor nem a pontuação** (roda depois da classificação; há teste).
+- "Diagnóstico registrado" é só a citação do que consta em atendimentos anteriores.
+- Os limites (3 dias, 30 dias, 2 atendimentos) ficam em `historico` no
+  [regras.json](triagem/dados/regras.json), **marcados como não validados**.
+- Se a idade da ficha for diferente da registrada no histórico, a tela pede para conferir se o
+  prontuário é mesmo daquele paciente.
+- O prontuário **não faz parte da ficha**: não é guardado na fila nem na base de treino, e nunca
+  vai no endereço da página.
+
+**De onde vem o histórico.** Neste protótipo, de um arquivo de pacientes **inventados**
+([historico_simulado.json](triagem/dados/historico_simulado.json)); os prontuários de demonstração
+são `100001` a `100004`. A leitura fica atrás da interface `FonteHistorico`: para ligar a Salus
+ao prontuário eletrônico de uma rede hospitalar, basta escrever outra implementação dela (a Salus
+só lê; nada do paciente é gravado). Com pacientes reais, o acesso ao prontuário é dado sensível
+de saúde e depende de contrato com a instituição, base legal na LGPD e aprovação ética. Para
+desligar o recurso: `--sem-historico`.
 
 ### Aba Fila
 
@@ -755,7 +814,8 @@ python -m pytest
 Os testes não usam rede (o modelo é sempre trocado por um extrator falso) e cobrem: vocabulário de
 sinais, questionário, fluxo da entrevista, pontuação (inclusive um teste com sequências aleatórias
 que confirma que nada reduz a pontuação), extratores, CLI, avaliador, roteiro gerado, interface e o
-próprio README.
+próprio README. Há também testes de robustez (entradas malformadas em todas as rotas, sessão
+ociosa, voz sem o modelo rápido) e do histórico do paciente.
 
 ## Estrutura do repositório
 
@@ -767,6 +827,7 @@ triagem/
   afericoes.py            aferições -> sinais medidos
   pontuacao.py, regras.py motor de cor e pontuação
   fila.py                 fila de atendimento (SQLite) e o que o paciente vê
+  historico.py            histórico do paciente (fonte trocável) e cruzamento por regra, sem IA
   usuarios.py             contas de enfermeiro, senhas (scrypt) e sessões
   treino.py               base de treino do extrator, anonimizada
   voz.py                  transcrição local (faster-whisper) e fala -> resposta, sem IA
@@ -778,6 +839,7 @@ triagem/
   relato.py, avaliar.py, roteiro.py, ajustar.py   comandos auxiliares
   dados/questionario.json perguntas e aferições (fonte única)
   dados/regras.json       limites, regras de cor e pesos (não validados)
+  dados/historico_simulado.json   pacientes inventados para demonstrar o histórico
   interface/servidor.py   tela do enfermeiro (127.0.0.1)
   interface/paciente.py   página do paciente no Wi-Fi (só leitura)
   interface/estatico/     HTML, CSS e JS das páginas
@@ -800,6 +862,8 @@ geração_banco_dados.py, salus_treinamento.db   banco de casos simulados para t
   Nenhum número clínico fica no código Python. Peso negativo é recusado. Toda regra de cor
   precisa de `explicacao_paciente`, o texto simples que o paciente vê no QR.
 - **Tempos-alvo da fila:** `fila.tempos_alvo_minutos` no mesmo arquivo, um por cor.
+- **Limites do histórico:** `historico` no mesmo arquivo (dias para retorno precoce, janela e
+  quantidade de atendimentos para "vindas repetidas").
 - **Sinal novo:** além do questionário, inclua o nome em `NomeSinal`
   ([triagem/sinais.py](triagem/sinais.py)) e um peso em `regras.json`.
 - **Nunca** use relatos da partição de teste para escrever exemplos de prompt ou ajustar pesos.
@@ -817,6 +881,10 @@ geração_banco_dados.py, salus_treinamento.db   banco de casos simulados para t
   para ajustar pesos; o `triagem.ajustar` mostra isso (correlação perto de zero). Três casos têm
   pressão sistólica menor que a diastólica.
 - **Supabase e Hugging Face** estão nas dependências, mas ainda não são usados.
+- **Histórico do paciente:** os dados são inventados e a fonte real (prontuário eletrônico de um
+  hospital) ainda não existe. O cruzamento só reconhece as três categorias de queixa do protótipo
+  e compara nomes de alergia por texto (não sabe que dipirona e Novalgina são o mesmo remédio).
+  Na reclassificação, o prontuário precisa ser digitado de novo, porque não é guardado.
 - **Voz:** a precisão do reconhecimento em português ainda não foi medida com gravações reais
   da equipe (os testes automáticos usam um transcritor falso). Teste com o microfone que será
   usado na unidade, em ambiente com barulho.

@@ -1,0 +1,58 @@
+{
+  "aviso": "Pacientes INVENTADOS para demonstração. Nenhum dado real. As datas são relativas ao dia de hoje (dias_atras).",
+  "pacientes": {
+    "100001": {
+      "idade": 58,
+      "sexo_biologico": "masculino",
+      "condicoes": ["hipertensão", "diabetes"],
+      "alergias": ["dipirona"],
+      "medicamentos": ["losartana", "metformina", "varfarina"],
+      "sinais": ["uso_anticoagulante", "doenca_cronica"],
+      "atendimentos": [
+        {"dias_atras": 2, "queixa": "dor_toracica", "descricao": "Dor no peito ao esforço", "cor": "laranja",
+         "diagnostico": "Angina", "desfecho": "alta com encaminhamento ao cardiologista"},
+        {"dias_atras": 19, "queixa": "dor_toracica", "descricao": "Aperto no peito e falta de ar", "cor": "laranja",
+         "diagnostico": "Angina", "desfecho": "observação e alta"},
+        {"dias_atras": 140, "queixa": "outra", "descricao": "Tontura", "cor": "verde",
+         "diagnostico": "Hipoglicemia leve", "desfecho": "alta"}
+      ]
+    },
+    "100002": {
+      "idade": 27,
+      "sexo_biologico": "feminino",
+      "condicoes": ["asma"],
+      "alergias": [],
+      "medicamentos": ["salbutamol (bombinha)"],
+      "sinais": ["doenca_cronica"],
+      "atendimentos": [
+        {"dias_atras": 9, "queixa": "respiratorio_febre", "descricao": "Falta de ar e chiado", "cor": "amarelo",
+         "diagnostico": "Crise de asma", "desfecho": "nebulização e alta"},
+        {"dias_atras": 26, "queixa": "respiratorio_febre", "descricao": "Tosse e chiado à noite", "cor": "amarelo",
+         "diagnostico": "Crise de asma", "desfecho": "nebulização e alta"},
+        {"dias_atras": 75, "queixa": "respiratorio_febre", "descricao": "Febre e tosse", "cor": "verde",
+         "diagnostico": "Infecção de vias aéreas", "desfecho": "alta"}
+      ]
+    },
+    "100003": {
+      "idade": 41,
+      "sexo_biologico": "feminino",
+      "condicoes": [],
+      "alergias": ["penicilina"],
+      "medicamentos": [],
+      "sinais": [],
+      "atendimentos": [
+        {"dias_atras": 300, "queixa": "dor_abdominal", "descricao": "Dor na parte de cima da barriga", "cor": "verde",
+         "diagnostico": "Gastrite", "desfecho": "alta"}
+      ]
+    },
+    "100004": {
+      "idade": 33,
+      "sexo_biologico": "masculino",
+      "condicoes": [],
+      "alergias": [],
+      "medicamentos": [],
+      "sinais": [],
+      "atendimentos": []
+    }
+  }
+}

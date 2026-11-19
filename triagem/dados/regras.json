@@ -37,6 +37,18 @@
     "frequencia_respiratoria": "quando houver falta de ar (Q09)"
   },
 
+  "historico": {
+
+    "nota": "Limites do cruzamento com o histórico do paciente. Só geram avisos; nunca mudam cor nem pontuação. NÃO validados pela equipe clínica.",
+
+    "retorno_precoce_dias": 3,
+
+    "janela_retorno_dias": 30,
+
+    "atendimentos_para_retorno_frequente": 2
+
+  },
+
   "fila": {
     "nota": "Tempos-alvo de referência do Protocolo de Manchester, em minutos, mostrados ao paciente. NÃO validados pela equipe clínica.",
     "tempos_alvo_minutos": {"vermelho": 0, "laranja": 10, "amarelo": 60, "verde": 120, "azul": 240},

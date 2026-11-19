@@ -23,6 +23,7 @@ log = logging.getLogger("triagem.interface")
 
 RECARREGAR_SEGUNDOS = 20
 LIMITE_FORMULARIO = 200
+LIMITE_DESCARTE = 64_000
 CABECALHOS = {
     "Cache-Control": "no-store",
     "X-Content-Type-Options": "nosniff",
@@ -197,11 +198,22 @@ class ManipuladorPaciente(BaseHTTPRequestHandler):
             self.send_header(chave, valor)
         self.end_headers()
 
+    def _descartar_corpo(self) -> None:
+        """Lê (e joga fora) um corpo pequeno antes de responder: no Windows, responder com corpo
+        ainda não lido derruba a conexão e o celular mostraria um erro do navegador."""
+        try:
+            tamanho = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            tamanho = 0
+        if 0 < tamanho <= LIMITE_DESCARTE:
+            self.rfile.read(tamanho)
+
     def _nao_permitido(self):
+        self._descartar_corpo()
         self.close_connection = True
         self._enviar(HTTPStatus.METHOD_NOT_ALLOWED.value, b"", "text/plain; charset=utf-8")
 
-    do_PUT = do_DELETE = do_PATCH = _nao_permitido
+    do_PUT = do_DELETE = do_PATCH = do_OPTIONS = _nao_permitido
 
 
 class ServidorPaciente(ThreadingHTTPServer):

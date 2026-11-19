@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="/estatico/estilo.css">
 </head>
 <body>
-  <a class="pular" href="#resultado">Ir para o resultado</a>
+  <a class="pular" href="#tela-triagem">Ir para o conteúdo</a>
 
   <div class="faixa" role="note">
     <strong>Protótipo com dados simulados.</strong>
@@ -63,55 +63,64 @@
       <p class="dica" id="qr-texto"></p>
       <p class="qr-url" id="qr-url"></p>
       <div class="controles centro">
-        <button type="button" class="pilula secundaria" id="qr-fechar">Fechar</button>
+        <button type="button" class="pilula secundaria" id="qr-fechar" data-destino="">Fechar</button>
         <button type="button" class="pilula" id="qr-nova">Nova triagem</button>
       </div>
     </div>
   </dialog>
 
-  <main class="layout" id="tela-triagem">
-    <section class="coluna" aria-labelledby="titulo-entrevista">
-      <div class="cartao barra">
-        <div class="controles entre">
-          <h2 id="titulo-entrevista">Nova triagem</h2>
-          <div class="controles">
-            <button type="button" class="pilula" id="analisar">Analisar</button>
+  <main class="tela-triagem" id="tela-triagem" tabindex="-1">
+    <ol class="passos" aria-label="Passos da triagem">
+      <li><button type="button" class="passo" id="passo-1" aria-current="step"><span class="n">1</span> Ficha</button></li>
+      <li><button type="button" class="passo" id="passo-2" aria-current="false"><span class="n">2</span> Análise</button></li>
+      <li><span class="passo" id="passo-3"><span class="n">3</span> Fila</span></li>
+    </ol>
+
+    <section class="alerta-imediato" id="alerta-imediato" role="alert" aria-label="Sinal de alerta" hidden></section>
+
+    <div class="layout" id="passo-ficha">
+      <section class="coluna" aria-labelledby="titulo-entrevista">
+        <div class="cartao barra">
+          <div class="controles entre">
+            <h2 id="titulo-entrevista">Nova triagem</h2>
             <button type="button" class="pilula secundaria" id="limpar">Limpar ficha</button>
           </div>
+          <details class="sub opcoes-demo">
+            <summary>Opções da demonstração</summary>
+            <div class="controles">
+              <label class="campo-inline">Exemplo
+                <select id="exemplo"><option value="">Carregar um exemplo…</option></select>
+              </label>
+              <label class="campo-inline">Leitura do relato na análise
+                <select id="extrator"></select>
+              </label>
+            </div>
+            <p class="dica" id="dica-extrator"></p>
+          </details>
         </div>
-        <details class="sub opcoes-demo">
-          <summary>Opções da demonstração</summary>
-          <div class="controles">
-            <label class="campo-inline">Exemplo
-              <select id="exemplo"><option value="">Carregar um exemplo…</option></select>
-            </label>
-            <label class="campo-inline">Leitura do relato
-              <select id="extrator"></select>
-            </label>
-            <label class="check"><input type="checkbox" id="auto" checked> Atualizar enquanto digito</label>
-          </div>
-          <p class="dica" id="dica-extrator"></p>
-        </details>
-      </div>
 
-      <section class="cartao voz" id="voz" aria-labelledby="titulo-voz" aria-live="polite"></section>
-      <div id="cadastro"></div>
-      <div id="perguntas"></div>
-    </section>
+        <section class="cartao voz" id="voz" aria-labelledby="titulo-voz" aria-live="polite"></section>
+        <div id="cadastro"></div>
+        <div id="perguntas"></div>
+      </section>
 
-    <aside class="coluna resultado" id="resultado" aria-labelledby="titulo-resultado" tabindex="-1">
-      <h2 id="titulo-resultado" class="so-leitor">Resultado da triagem</h2>
-      <div id="painel" aria-live="polite">
-        <div class="cartao vazio"><p>Preencha a idade para ver a triagem.</p></div>
-      </div>
-    </aside>
+      <aside class="coluna lateral" id="lateral" aria-label="Resumo da ficha e histórico do paciente">
+        <section class="cartao resumo-ficha" id="resumo-ficha" aria-live="polite"></section>
+        <section class="cartao historico" id="historico" aria-labelledby="titulo-historico" aria-live="polite" hidden></section>
+      </aside>
+    </div>
+
+    <div class="passo-analise" id="passo-analise" hidden>
+      <h2 id="titulo-resultado" class="so-leitor">Análise da triagem</h2>
+      <div id="painel" aria-live="polite"></div>
+    </div>
   </main>
 
   <footer class="rodape">
     Salus IA · protótipo de hackathon · nenhum dado sai desta máquina, a menos que o modelo configurado seja remoto.
   </footer>
 
-  <a class="mini" id="mini" href="#resultado" hidden></a>
+  <button type="button" class="mini" id="mini" hidden>Analisar</button>
 
   <script src="/estatico/app.js"></script>
 </body>

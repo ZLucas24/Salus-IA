@@ -13,20 +13,48 @@ from triagem.sinais import NomeSinal, Origem, Status
 
 CAMPOS_PLAUSIVEIS = ("temperatura", "saturacao", "pressao_sistolica", "pressao_diastolica",
                      "frequencia_cardiaca", "frequencia_respiratoria", "glicemia", "glasgow")
+CAMPOS_NUMERICOS = ("idade",) + CAMPOS_PLAUSIVEIS
+
+
+def _mensagem(err: dict) -> str:
+    """Erro de validação em português (as mensagens do pydantic vêm em inglês)."""
+    tipo, ctx = err["type"], err.get("ctx") or {}
+    if tipo == "missing":
+        return "campo obrigatório"
+    if tipo == "extra_forbidden":
+        return "campo desconhecido"
+    if tipo == "int_from_float":
+        return "deve ser um número inteiro"
+    if tipo in ("less_than_equal", "less_than"):
+        return f"deve ser no máximo {ctx.get('le', ctx.get('lt'))}"
+    if tipo in ("greater_than_equal", "greater_than"):
+        return f"deve ser no mínimo {ctx.get('ge', ctx.get('gt'))}"
+    if tipo == "enum":
+        return f"deve ser um de: {ctx.get('expected', '').replace(' or ', ', ')}"
+    if tipo == "finite_number":
+        return "deve ser um número finito"
+    if tipo.startswith(("int_", "float_")):
+        return "deve ser um número"
+    return err["msg"]
 
 
 def validar_dados_atendente(bruto) -> tuple[DadosAtendente | None, list[str]]:
     """Valida cadastro e aferições. Devolve (dados, erros); a idade é obrigatória."""
     if not isinstance(bruto, dict):
         return None, ["dados_atendente: objeto obrigatório (com pelo menos 'idade')"]
+    # número é número: `true` viraria idade 1 e "40" viraria 40 por conversão automática
+    erros = [f"dados_atendente.{campo}: deve ser um número; recebi {bruto[campo]!r}" for campo in CAMPOS_NUMERICOS
+             if bruto.get(campo) is not None
+             and (isinstance(bruto[campo], bool) or not isinstance(bruto[campo], (int, float)))]
+    if erros:
+        return None, erros
     try:
         dados = DadosAtendente(**bruto)
     except ValidationError as e:
         erros = []
         for err in e.errors():
             campo = ".".join(str(p) for p in err["loc"]) or "dados_atendente"
-            msg = "campo obrigatório" if err["type"] == "missing" else err["msg"]
-            erros.append(f"dados_atendente.{campo}: {msg}")
+            erros.append(f"dados_atendente.{campo}: {_mensagem(err)}")
         return None, erros
 
     plaus = carregar_regras()["plausibilidade"]

@@ -25,7 +25,8 @@ import time
 
 log = logging.getLogger("triagem.usuarios")
 
-FORMATO_LOGIN = re.compile(r"^[a-z0-9._-]{3,32}$")
+FORMATO_LOGIN = re.compile(r"[a-z0-9._-]{3,32}")
+MAX_FALHAS_GUARDADAS = 1000
 SENHA_MINIMA = 8
 SESSAO_MAX_S = 12 * 3600       # um plantão
 SESSAO_OCIOSA_S = 60 * 60      # sem uso por 1 hora, pede a senha de novo
@@ -36,6 +37,10 @@ _SCRYPT = {"n": 2 ** 14, "r": 8, "p": 1, "dklen": 32}
 
 class ErroUsuario(ValueError):
     pass
+
+
+def _normalizar(login) -> str:
+    return (login or "").strip().lower() if isinstance(login, str) else ""
 
 
 def _hash(senha: str, sal: bytes) -> bytes:
@@ -66,8 +71,8 @@ class Usuarios:
 
     # --- contas -------------------------------------------------------------------------
     def criar(self, login: str, nome: str, senha: str) -> None:
-        login = (login or "").strip().lower()
-        if not FORMATO_LOGIN.match(login):
+        login = _normalizar(login)
+        if not FORMATO_LOGIN.fullmatch(login):
             raise ErroUsuario("login: 3 a 32 caracteres, só letras minúsculas, números, ponto, hífen ou _")
         if not (nome or "").strip():
             raise ErroUsuario("informe o nome")
@@ -82,6 +87,7 @@ class Usuarios:
             raise ErroUsuario(f"o login {login!r} já existe") from None
 
     def trocar_senha(self, login: str, senha: str) -> None:
+        login = _normalizar(login)
         if len(senha or "") < SENHA_MINIMA:
             raise ErroUsuario(f"a senha precisa de pelo menos {SENHA_MINIMA} caracteres")
         sal = secrets.token_bytes(16)
@@ -93,6 +99,7 @@ class Usuarios:
         self._encerrar_sessoes(login)
 
     def desativar(self, login: str) -> bool:
+        login = _normalizar(login)
         with self._trava, self._con:
             cur = self._con.execute("UPDATE usuarios SET ativo = 0 WHERE login = ?", (login,))
         self._encerrar_sessoes(login)
@@ -110,7 +117,7 @@ class Usuarios:
     # --- login e sessões ---------------------------------------------------------------------
     def entrar(self, login: str, senha: str) -> str | None:
         """Devolve o código da sessão, ou None (login/senha errados, conta inativa ou bloqueada)."""
-        login = (login or "").strip().lower()
+        login = _normalizar(login)
         agora = self._relogio()
         falhas, desde = self._falhas.get(login, (0, 0.0))
         if falhas >= TENTATIVAS and agora - desde < BLOQUEIO_S:
@@ -122,6 +129,8 @@ class Usuarios:
         sal = u["sal"] if u else b"\0" * 16
         certo = hmac.compare_digest(_hash(senha or "", sal), u["hash"] if u else b"\0" * 32)
         if not (u and certo):
+            if len(self._falhas) >= MAX_FALHAS_GUARDADAS:  # não deixa a lista crescer sem limite
+                self._falhas = {k: v for k, v in self._falhas.items() if agora - v[1] < BLOQUEIO_S}
             self._falhas[login] = (falhas + 1 if agora - desde < BLOQUEIO_S else 1, agora)
             return None
         self._falhas.pop(login, None)
@@ -130,8 +139,10 @@ class Usuarios:
             self._sessoes[sessao] = {"login": login, "nome": u["nome"], "inicio": agora, "uso": agora}
         return sessao
 
-    def sessao(self, codigo: str | None) -> dict | None:
-        """Quem está logado com este código (e renova o tempo ocioso), ou None."""
+    def sessao(self, codigo: str | None, renovar: bool = True) -> dict | None:
+        """Quem está logado com este código, ou None. `renovar` reinicia o tempo ocioso: deve ser
+        False nas consultas automáticas da página (a fila se atualiza sozinha a cada 5 segundos),
+        senão a sessão nunca expiraria com o computador abandonado."""
         if not codigo:
             return None
         agora = self._relogio()
@@ -142,7 +153,8 @@ class Usuarios:
             if agora - s["inicio"] > SESSAO_MAX_S or agora - s["uso"] > SESSAO_OCIOSA_S:
                 del self._sessoes[codigo]
                 return None
-            s["uso"] = agora
+            if renovar:
+                s["uso"] = agora
             return {"login": s["login"], "nome": s["nome"]}
 
     def sair(self, codigo: str | None) -> None:
@@ -182,17 +194,17 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.acao == "criar":
             usuarios.criar(args.login, args.nome, _pedir_senha())
-            print(f"conta criada: {args.login.strip().lower()}", file=sys.stderr)
+            print(f"conta criada: {_normalizar(args.login)}", file=sys.stderr)
         elif args.acao == "listar":
             for u in usuarios.listar():
                 print(f"{u['login']:<20} {u['nome']}{'' if u['ativo'] else '  (desativada)'}")
         elif args.acao == "desativar":
             if not usuarios.desativar(args.login):
-                raise ErroUsuario(f"login {args.login!r} não existe")
-            print(f"conta desativada: {args.login}", file=sys.stderr)
+                raise ErroUsuario(f"login {_normalizar(args.login)!r} não existe")
+            print(f"conta desativada: {_normalizar(args.login)}", file=sys.stderr)
         elif args.acao == "senha":
             usuarios.trocar_senha(args.login, _pedir_senha())
-            print(f"senha trocada: {args.login}", file=sys.stderr)
+            print(f"senha trocada: {_normalizar(args.login)}", file=sys.stderr)
     except ErroUsuario as e:
         print(f"erro: {e}", file=sys.stderr)
         return 1
