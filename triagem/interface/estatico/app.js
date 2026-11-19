@@ -61,6 +61,10 @@ const ALERTAS = {
   limites_pediatricos: ['Limites pediátricos', 'info'], sem_modulo: ['Nenhum módulo identificado', 'info'],
   afericao_faltando: ['Aferição não registrada', 'info'],
 };
+const QUEIXAS = {
+  dor_toracica: 'Dor no peito', dor_abdominal: 'Dor abdominal', respiratorio_febre: 'Respiratório ou febre',
+  outra: 'Outra queixa', indefinida: 'Queixa indefinida',
+};
 const MARCADORES = ['nao_sabe', 'recusou', 'nao_se_aplica'];
 const CADASTRO = [
   ['idade', 'Idade (anos)', 'inteiro', true], ['sexo_biologico', 'Sexo biológico', 'sexo'],
@@ -239,8 +243,14 @@ function criarPergunta(p, mudou) {
 }
 
 /* ---------------------------------------------------------------- estado da página */
+// A triagem tem 3 passos: 1) preencher a ficha, 2) analisar (cor, alertas, histórico) e
+// 3) colocar na fila. A cor e a pontuação só aparecem no passo 2; o botão da fila, só depois dele.
 
-const estado = { dados: null, exemplos: [], campos: {}, perguntas: {}, modulos: {}, seq: 0, timer: null, saida: null, reclassificando: null };
+const estado = {
+  dados: null, exemplos: [], campos: {}, perguntas: {}, modulos: {}, seq: 0, seqAnalise: 0, timer: null,
+  saida: null, erros: null, analisando: false, enviando: false, passo: 'ficha', rolagemFicha: 0, pedeIdade: false, reclassificando: null,
+  historico: { prontuario: '', dados: null, padroes: null, situacao: 'vazio', seq: 0, timer: null },
+};
 
 function construirCadastro() {
   const campos = CADASTRO.map(([nome, texto, tipo, obrig]) => {
@@ -256,9 +266,19 @@ function construirCadastro() {
     const dica = nome === 'idade' ? null : h('small', { texto: 'em branco = não aferido' });
     return h('label', { class: 'campo' }, h('span', { class: obrig ? 'obrig' : '', texto: texto }), w.el, nome === 'sexo_biologico' ? h('small', { texto: 'decide a pergunta de gravidez' }) : dica);
   });
-  $('#cadastro').replaceChildren(h('section', { class: 'cartao' }, h('h2', { texto: 'Cadastro e aferições' }),
-    h('p', { class: 'dica', texto: 'Só a idade é obrigatória. Aferição não feita fica em branco e nunca vale como normal.' }),
-    h('div', { class: 'grade' }, campos)));
+  const blocos = [h('h2', { texto: 'Cadastro e aferições' })];
+  if (estado.dados.historico.ligado) {
+    // o prontuário não entra na ficha: serve só para consultar o histórico
+    const input = h('input', { type: 'text', id: 'prontuario', inputmode: 'numeric', maxlength: '12', autocomplete: 'off', placeholder: 'só números', oninput: prontuarioDigitado });
+    input.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); buscarHistorico(); } });
+    blocos.push(h('div', { class: 'linha-prontuario' },
+      h('label', { class: 'campo' }, h('span', { texto: 'Prontuário (opcional)' }), input),
+      h('button', { type: 'button', class: 'pilula secundaria', texto: 'Buscar histórico', onclick: () => buscarHistorico() }),
+      h('a', { class: 'dica', id: 'prontuario-situacao', href: '#historico' })));
+  }
+  blocos.push(h('p', { class: 'dica', texto: 'Só a idade é obrigatória. Aferição não feita fica em branco e nunca vale como normal.' }),
+    h('div', { class: 'grade' }, campos));
+  $('#cadastro').replaceChildren(h('section', { class: 'cartao' }, blocos));
 }
 
 function construirPerguntas(q) {
@@ -299,57 +319,255 @@ function preencher(ficha) {
   for (const [id, c] of Object.entries(estado.perguntas)) c.set(r[id]);
 }
 
+/* ---------------------------------------------------------------- histórico do paciente */
+// O prontuário vai à parte da ficha, só para consultar o histórico; não é guardado na fila nem
+// na base de treino. O cruzamento é feito no servidor, por regra em código: informa a equipe,
+// não é diagnóstico e não muda a cor nem a pontuação.
+
+const PADROES = {
+  retorno_precoce: 'Retorno em pouco tempo', retorno_frequente: 'Vindas repetidas',
+  queixa_repetida: 'Mesma queixa de antes', alergia_no_historico: 'Alergia registrada',
+  historico_diverge_da_ficha: 'Histórico e ficha divergem',
+};
+const dataBR = (iso) => String(iso).split('-').reverse().join('/');
+const haDias = (d) => (d === 0 ? 'hoje' : d === 1 ? 'ontem' : `há ${d} dias`);
+
+function prontuarioDigitado() {
+  const hst = estado.historico;
+  clearTimeout(hst.timer);
+  const valor = $('#prontuario').value.trim();
+  if (valor === '') { limparHistorico(); return; }
+  if (valor === hst.prontuario && hst.dados) return;
+  hst.timer = setTimeout(() => buscarHistorico(), 600); // busca sozinho quando a digitação para
+}
+
+function limparHistorico() {
+  const hst = estado.historico;
+  clearTimeout(hst.timer);
+  hst.seq += 1; // descarta uma busca em andamento
+  Object.assign(hst, { prontuario: '', dados: null, padroes: null, situacao: 'vazio' });
+  const campo = $('#prontuario');
+  if (campo) campo.value = '';
+  renderHistorico();
+}
+
+// `cruzar`: depois de achar o histórico, recalcula para cruzar com a ficha (só no passo 1;
+// no "Analisar" quem cruza é a própria análise).
+async function buscarHistorico(cruzar = true) {
+  const hst = estado.historico;
+  const campo = $('#prontuario');
+  if (!campo) return;
+  clearTimeout(hst.timer);
+  const valor = campo.value.trim();
+  if (valor === '') { limparHistorico(); return; }
+  const minha = ++hst.seq;
+  Object.assign(hst, { prontuario: '', dados: null, padroes: null, situacao: 'buscando' });
+  if (!/^[0-9]{4,12}$/.test(valor)) { hst.situacao = 'invalido'; renderHistorico(); return; }
+  renderHistorico();
+  let situacao = 'erro', dados = null;
+  try {
+    const { status, corpo } = await postar('/api/historico', { prontuario: valor });
+    if (status === 200) { situacao = 'ok'; dados = corpo; }
+    else if (status === 404) situacao = 'nao_encontrado';
+    else if (status === 400) situacao = 'invalido';
+  } catch (e) { /* fica como 'erro': a triagem segue sem histórico */ }
+  if (minha !== hst.seq) return;
+  Object.assign(hst, { prontuario: dados ? valor : '', dados, padroes: null, situacao });
+  renderHistorico();
+  if (dados && cruzar !== false && estado.passo === 'ficha') calcular(); // cruza já com o que estiver preenchido
+}
+
+function listaDePadroes(padroes) {
+  return h('ul', { class: 'alertas' }, padroes.map((p) => h('li', { class: `alerta ${p.nivel}` },
+    h('span', { class: 'cod', texto: PADROES[p.codigo] ?? humanizar(p.codigo) }), h('span', { texto: p.mensagem }))));
+}
+
+function corpoDoHistorico(hst) {
+  const d = hst.dados, filhos = [];
+  const quem = [`Prontuário ${d.prontuario}`];
+  if (typeof d.idade === 'number') quem.push(`${d.idade} anos`);
+  if (d.sexo_biologico) quem.push(rotulo(d.sexo_biologico).toLowerCase());
+  filhos.push(h('p', { class: 'hist-quem', texto: quem.join(' · ') }));
+  const idadeFicha = estado.campos.idade.get();
+  if (idadeFicha !== undefined && typeof d.idade === 'number' && Math.abs(idadeFicha - d.idade) > 1) {
+    filhos.push(h('p', { class: 'alerta atencao', texto: `A idade da ficha (${idadeFicha}) é diferente da registrada no histórico (${d.idade}). Confira se o prontuário é deste paciente.` }));
+  }
+  filhos.push(h('p', { class: 'rotulo-secao', texto: 'Cruzamento com a ficha de hoje' }));
+  if (hst.padroes === null) filhos.push(h('p', { class: 'dica', texto: 'Preencha a idade para cruzar o histórico com a ficha.' }));
+  else if (!hst.padroes.length) filhos.push(h('p', { class: 'dica', texto: 'Nenhum padrão com a ficha de hoje até agora.' }));
+  else filhos.push(listaDePadroes(hst.padroes));
+  const fato = (titulo, itens, classe) => h('div', { class: 'hist-fato' }, h('span', { class: 'rotulo', texto: titulo }),
+    itens.length ? h('div', { class: 'chips' }, itens.map((i) => h('span', { class: `chip ${classe}`, texto: i })))
+      : h('span', { class: 'dica', texto: 'nenhum registro' }));
+  filhos.push(fato('Alergias registradas', d.alergias, 'perigo'), fato('Condições', d.condicoes, 'neutro'), fato('Remédios em uso', d.medicamentos, 'neutro'));
+  filhos.push(h('p', { class: 'rotulo-secao', texto: `Atendimentos anteriores (${d.atendimentos.length})` }));
+  filhos.push(d.atendimentos.length
+    ? h('ul', { class: 'hist-lista' }, d.atendimentos.map((a) => h('li', {},
+      h('div', { class: 'hist-linha' }, h('span', { class: `cor-chip cor-${a.cor}`, texto: CORES[a.cor] ?? a.cor }),
+        h('strong', { texto: a.descricao }), h('span', { class: 'dica', texto: `${dataBR(a.data)} · ${haDias(a.ha_dias)}` })),
+      (a.diagnostico || a.desfecho) ? h('p', { class: 'dica', texto: [a.diagnostico ? `Diagnóstico registrado: ${a.diagnostico}` : null, a.desfecho ? `Desfecho: ${a.desfecho}` : null].filter(Boolean).join(' · ') }) : null)))
+    : h('p', { class: 'dica', texto: 'Nenhum atendimento anterior registrado.' }));
+  filhos.push(h('p', { class: 'dica', texto: 'O histórico informa a equipe. Não é diagnóstico e não muda a cor nem a pontuação.' }));
+  return filhos;
+}
+
+function renderHistorico() {
+  const caixa = $('#historico');
+  if (!caixa || !estado.dados) return;
+  if (!estado.dados.historico.ligado) { caixa.hidden = true; return; }
+  caixa.hidden = false;
+  const hst = estado.historico;
+  const filhos = [h('div', { class: 'controles entre' }, h('h2', { id: 'titulo-historico', texto: 'Histórico do paciente' }),
+    hst.dados && hst.dados.simulado ? h('span', { class: 'selo', texto: 'dados simulados' }) : null)];
+  let resumo = '';
+  if (hst.situacao === 'ok') {
+    filhos.push(...corpoDoHistorico(hst));
+    const n = hst.dados.atendimentos.length, avisos = hst.padroes ? hst.padroes.length : 0;
+    resumo = `${n === 1 ? '1 atendimento anterior' : `${n} atendimentos anteriores`}${avisos ? ` · ${avisos === 1 ? '1 aviso' : `${avisos} avisos`}` : ''} · ver histórico`;
+  } else if (hst.situacao === 'buscando') {
+    filhos.push(h('p', { class: 'dica', texto: 'Buscando o histórico…' }));
+    resumo = 'Buscando…';
+  } else if (hst.situacao === 'invalido') {
+    filhos.push(h('p', { class: 'alerta atencao', texto: 'Prontuário inválido: use de 4 a 12 dígitos, só números.' }));
+    resumo = 'Prontuário inválido';
+  } else if (hst.situacao === 'nao_encontrado') {
+    filhos.push(h('p', { class: 'alerta info', texto: 'Prontuário não encontrado. A triagem segue normalmente, sem histórico.' }));
+    resumo = 'Prontuário não encontrado';
+  } else if (hst.situacao === 'erro') {
+    filhos.push(h('p', { class: 'alerta atencao', texto: 'Não foi possível consultar o histórico agora. A triagem segue normalmente.' }));
+    resumo = 'Histórico indisponível';
+  } else {
+    filhos.push(h('p', { class: 'dica', texto: 'Opcional. Digite o prontuário no cadastro: a Salus mostra os atendimentos anteriores e avisa quando a ficha de hoje repete um padrão.' }));
+    const exemplos = estado.dados.historico.exemplos;
+    if (exemplos.length) {
+      filhos.push(h('div', { class: 'chips' }, h('span', { class: 'dica', texto: 'Para demonstrar:' }),
+        exemplos.map((p) => h('button', { type: 'button', class: 'chip', texto: p, onclick() { $('#prontuario').value = p; buscarHistorico(); } }))));
+    }
+  }
+  if (hst.situacao !== 'vazio') {
+    filhos.push(h('div', { class: 'controles' }, h('button', { type: 'button', class: 'pilula discreta', texto: 'Tirar o histórico', onclick: limparHistorico })));
+  }
+  const situacao = $('#prontuario-situacao');
+  if (situacao) situacao.textContent = resumo;
+  caixa.replaceChildren(...filhos);
+}
+
 /* ---------------------------------------------------------------- chamada ao servidor */
 
 function agendar() {
-  const painel = $('#painel');
-  const auto = $('#auto').checked && $('#extrator').value === 'mock';
   clearTimeout(estado.timer);
-  if (auto) { estado.timer = setTimeout(calcular, 250); return; }
-  if (painel.querySelector('.cor-cartao')) painel.dataset.desatualizado = '1';
-  atualizarAviso();
+  estado.timer = setTimeout(calcular, 250);
 }
 
-function atualizarAviso() {
-  const painel = $('#painel');
-  const antigo = painel.querySelector('.desatualizado');
-  if (antigo) antigo.remove();
-  if (painel.dataset.desatualizado === '1') {
-    painel.prepend(h('p', { class: 'provisoria desatualizado', texto: 'Há alterações ainda não analisadas. Clique em "Analisar".' }));
-  }
-}
-
-async function calcular() {
+// Roda o fluxo real no servidor e guarda o resultado em `estado`. Enquanto a ficha é preenchida
+// (passo 1) a leitura do relato é sempre a de palavras-chave, que é instantânea: ela guia as
+// pendências e os alertas imediatos. O leitor escolhido (ex.: modelo local) só roda no "Analisar".
+async function calcular(extrator = 'mock') {
   const ficha = lerFicha();
-  const painel = $('#painel');
+  const hst = estado.historico;
   const minha = ++estado.seq;
   if (ficha.dados_atendente.idade === undefined) {
-    estado.saida = null;
-    renderVoz();
-    painel.dataset.desatualizado = '';
-    painel.replaceChildren(h('div', { class: 'cartao vazio' }, h('p', { texto: 'Preencha a idade para ver a triagem.' })));
+    estado.saida = null; estado.erros = null; hst.padroes = null;
     limparMarcas();
-    atualizarMini(null);
-    return;
+    renderTudo();
+    return false;
   }
-  painel.classList.add('carregando');
+  estado.pedeIdade = false;
+  const envio = { ficha, extrator };
+  if (hst.dados) envio.prontuario = hst.prontuario;
   try {
-    const r = await fetch('/api/triagem', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ficha, extrator: $('#extrator').value }),
-    });
-    const corpo = await r.json();
-    if (minha !== estado.seq) return;
-    painel.dataset.desatualizado = '';
-    if (r.status === 200) mostrarSaida(corpo.saida); else mostrarErros(corpo.erros || ['erro desconhecido']);
+    const { status, corpo } = await postar('/api/triagem', envio);
+    if (minha !== estado.seq) return false;
+    if (status === 200) {
+      estado.saida = corpo.saida; estado.erros = null;
+      // só aceita o cruzamento se o prontuário ainda for o mesmo de quando o pedido saiu
+      if (hst.dados && hst.prontuario === envio.prontuario) hst.padroes = corpo.historico ? corpo.historico.padroes : null;
+      marcarPerguntas(corpo.saida);
+    } else {
+      estado.erros = corpo.erros || ['erro desconhecido'];
+    }
   } catch (e) {
-    if (minha === estado.seq) mostrarErros([`Não foi possível falar com o servidor local (${e.message}). Ele ainda está rodando?`]);
-  } finally {
-    if (minha === estado.seq) painel.classList.remove('carregando');
+    if (minha !== estado.seq) return false;
+    estado.erros = [`Não foi possível falar com o servidor local (${e.message}). Ele ainda está rodando?`];
+  }
+  renderTudo();
+  return estado.erros === null;
+}
+
+function renderTudo() {
+  renderImediato();
+  renderVoz();
+  renderResumo();
+  renderHistorico();
+  if (estado.passo === 'analise') renderAnalise();
+}
+
+/* ---------------------------------------------------------------- passos */
+
+// Encerra a gravação em andamento. `ocupado` já fica ligado aqui, para um segundo toque seguido
+// não abrir outra gravação antes de a primeira ser tratada.
+function pararGravacao() {
+  if (voz.gravador && voz.gravador.state === 'recording') {
+    voz.ocupado = true;
+    voz.gravador.stop();
+    renderVoz();
   }
 }
 
-/* ---------------------------------------------------------------- resultado */
+function atualizarMini() {
+  $('#mini').hidden = estado.passo !== 'ficha' || $('#tela-triagem').hidden;
+}
+
+function irParaPasso(passo, manterRolagem = false) {
+  const antes = estado.passo;
+  if (antes === 'ficha' && passo !== 'ficha') estado.rolagemFicha = window.scrollY;
+  estado.passo = passo;
+  const analise = passo === 'analise';
+  $('#passo-ficha').hidden = analise;
+  $('#passo-analise').hidden = !analise;
+  $('#passo-1').setAttribute('aria-current', analise ? 'false' : 'step');
+  $('#passo-1').classList.toggle('feito', analise);
+  $('#passo-2').setAttribute('aria-current', analise ? 'step' : 'false');
+  atualizarMini();
+  renderTudo();
+  if (analise) window.scrollTo({ top: 0 });
+  else if (antes === 'analise' && !manterRolagem) window.scrollTo({ top: estado.rolagemFicha });
+}
+
+async function analisar() {
+  if (estado.campos.idade.get() === undefined) {
+    if (estado.passo !== 'ficha') irParaPasso('ficha', true);
+    estado.pedeIdade = true;
+    renderResumo();
+    const campo = estado.campos.idade.el;
+    campo.scrollIntoView({ block: 'center' });
+    campo.focus({ preventScroll: true });
+    return;
+  }
+  pararGravacao();
+  clearTimeout(estado.timer);
+  const minha = ++estado.seqAnalise;
+  estado.analisando = true;
+  irParaPasso('analise');
+  // prontuário digitado e ainda não buscado (ou busca em andamento): resolve antes, para a
+  // análise já sair cruzada com o histórico certo
+  const hst = estado.historico, campo = $('#prontuario');
+  if (campo && (campo.value.trim() !== hst.prontuario || hst.situacao === 'buscando')) await buscarHistorico(false);
+  if (minha !== estado.seqAnalise) return;
+  await calcular($('#extrator').value);
+  if (minha !== estado.seqAnalise) return; // houve outra análise depois desta
+  estado.analisando = false;
+  renderAnalise();
+}
+
+function voltarParaFicha() {
+  if (estado.enviando) return; // a ficha está indo para a fila: espera a resposta
+  estado.seqAnalise += 1; // uma análise em andamento deixa de valer
+  estado.analisando = false;
+  irParaPasso('ficha');
+}
+
+/* ---------------------------------------------------------------- passo 1: avisos ao lado da ficha */
 
 function limparMarcas() {
   for (const c of Object.values(estado.perguntas)) {
@@ -361,11 +579,19 @@ function limparMarcas() {
 function irParaPergunta(id) {
   const c = estado.perguntas[id];
   if (!c) return;
+  if (estado.enviando) return;
+  if (estado.passo !== 'ficha') voltarParaFichaSemRolar();
   const det = c.el.closest('details');
   if (det) det.open = true;
   c.el.scrollIntoView({ behavior: 'smooth', block: 'center' });
   const foco = c.el.querySelector('input, select, button');
   if (foco) foco.focus({ preventScroll: true });
+}
+
+function voltarParaFichaSemRolar() {
+  estado.seqAnalise += 1;
+  estado.analisando = false;
+  irParaPasso('ficha', true);
 }
 
 function marcarPerguntas(s) {
@@ -389,44 +615,100 @@ function marcarPerguntas(s) {
   }
 }
 
-function secao(titulo, ...filhos) { return h('section', { class: 'cartao' }, h('h3', { texto: titulo }), ...filhos); }
-
-function mostrarErros(erros) {
-  limparMarcas();
-  atualizarMini(null);
-  $('#painel').replaceChildren(h('section', { class: 'cartao erro-cartao', role: 'alert' },
-    h('h3', { texto: 'Ficha inválida' }), h('p', { texto: 'Corrija o que está abaixo para ver a triagem:' }),
-    h('ul', {}, erros.map((e) => h('li', { texto: e })))));
+// Sinal de alerta aparece na hora, ainda no passo 1: é aviso de segurança, não a cor.
+function renderImediato() {
+  const caixa = $('#alerta-imediato');
+  const graves = estado.passo === 'ficha' && estado.saida && estado.campos.idade.get() !== undefined
+    ? estado.saida.alertas.filter((a) => a.codigo === 'sinal_de_alerta') : [];
+  const texto = graves.map((a) => a.mensagem).join('\n');
+  caixa.hidden = !graves.length;
+  if (caixa.dataset.texto === texto) return; // não repete o anúncio para o leitor de tela
+  caixa.dataset.texto = texto;
+  caixa.replaceChildren(...(graves.length ? [h('div', { class: 'alerta grave' },
+    h('span', { class: 'cod', texto: 'Sinal de alerta' }), graves.map((a) => h('span', { texto: a.mensagem })),
+    h('span', { class: 'dica', texto: 'Aviso imediato. A cor sugerida aparece na análise.' }))] : []));
 }
+
+function chipsDePendentes(ids) {
+  return h('div', { class: 'chips' }, ids.map((id) => h('button', { type: 'button', class: 'chip alerta-chip', title: 'Ir para a pergunta', onclick: () => irParaPergunta(id), texto: id })));
+}
+
+function renderResumo() {
+  const caixa = $('#resumo-ficha');
+  if (!caixa || !estado.dados) return;
+  const filhos = [h('h2', { texto: 'Pronto para analisar?' })];
+  if (estado.campos.idade.get() === undefined) {
+    filhos.push(h('p', { class: estado.pedeIdade ? 'alerta atencao' : 'dica', texto: 'Preencha a idade no cadastro para começar.' }));
+  } else if (estado.erros) {
+    filhos.push(h('div', { class: 'alerta grave', role: 'alert' }, h('span', { class: 'cod', texto: 'Corrija na ficha' }),
+      h('ul', { class: 'lista-erros' }, estado.erros.map((e) => h('li', { texto: e })))));
+  } else if (estado.saida) {
+    const s = estado.saida, pend = s.perguntas_pendentes;
+    if (pend.length) {
+      filhos.push(h('p', {}, h('strong', { texto: pend.length === 1 ? '1 pergunta pendente' : `${pend.length} perguntas pendentes` })), chipsDePendentes(pend));
+    } else {
+      filhos.push(h('p', { class: 'tudo-certo', texto: 'Nenhuma pergunta pendente.' }));
+    }
+    if (s.afericoes_faltando.length) filhos.push(h('p', { class: 'dica', texto: `Aferições não registradas: ${s.afericoes_faltando.join(', ')} (valem como “não aferidas”).` }));
+  }
+  filhos.push(h('button', { type: 'button', class: 'pilula enorme', texto: estado.reclassificando ? 'Analisar de novo' : 'Analisar', onclick: analisar }),
+    h('p', { class: 'dica', texto: 'A cor e a pontuação aparecem na análise. Só depois dela o paciente pode ir para a fila.' }));
+  caixa.replaceChildren(...filhos);
+}
+
+/* ---------------------------------------------------------------- passo 2: análise */
+
+function secao(titulo, ...filhos) { return h('section', { class: 'cartao' }, h('h3', { texto: titulo }), ...filhos); }
 
 function linhaSinal(x) {
   const extras = [];
   if (x.valor !== null && x.valor !== undefined) extras.push(`valor: ${x.valor}`);
   if (x.itens && x.itens.length) extras.push(x.itens.join(', '));
-  if (x.status_no_relato) extras.push(`o relato dizia: ${STATUS[x.status_no_relato].toLowerCase()}`);
+  if (x.status_no_relato) extras.push(`o relato dizia: ${(STATUS[x.status_no_relato] ?? x.status_no_relato).toLowerCase()}`);
   if (x.trecho) extras.push(`trecho: “${x.trecho}”`);
   return h('li', {}, h('span', { class: 'nome', texto: nomeSinal(x.nome) }),
     h('span', { class: 'chip neutro', texto: ORIGEM[x.origem] ?? x.origem }),
     extras.length ? h('span', { class: 'detalhe', texto: extras.join(' · ') }) : null);
 }
 
-function atualizarMini(c) {
-  const mini = $('#mini');
-  if (!c) { mini.hidden = true; return; }
-  mini.hidden = false;
-  mini.className = `mini cor-${c.cor}`;
-  mini.textContent = `${c.cor.toUpperCase()} · ${c.pontuacao}/100 · ver resultado`;
+function botaoVoltar(texto = '← Voltar à ficha') {
+  return h('button', { type: 'button', class: 'pilula secundaria', texto, onclick: voltarParaFicha });
 }
 
-function mostrarSaida(s) {
-  estado.saida = s;
-  marcarPerguntas(s);
-  const c = s.classificacao;
-  atualizarMini(c);
-  const painel = $('#painel');
-  const cartoes = [];
+function cartaoDoHistoricoNaAnalise() {
+  const hst = estado.historico;
+  if (!estado.dados.historico.ligado) return null;
+  if (!hst.dados) {
+    const motivo = { nao_encontrado: 'Prontuário não encontrado', invalido: 'Prontuário inválido', erro: 'Histórico indisponível agora' }[hst.situacao]
+      ?? 'Nenhum prontuário informado';
+    return secao('Histórico do paciente', h('p', { class: 'dica', texto: `${motivo}: a análise não considerou atendimentos anteriores.` }));
+  }
+  const padroes = hst.padroes || [];
+  const n = hst.dados.atendimentos.length;
+  return secao(`Histórico do paciente: ${padroes.length === 1 ? '1 padrão' : `${padroes.length} padrões`}`,
+    h('p', { class: 'dica', texto: `Prontuário ${hst.dados.prontuario} · ${n === 1 ? '1 atendimento anterior' : `${n} atendimentos anteriores`}${hst.dados.simulado ? ' · dados simulados' : ''}` }),
+    padroes.length ? listaDePadroes(padroes) : h('p', { class: 'dica', texto: 'Nenhum padrão entre o histórico e a ficha de hoje.' }),
+    h('p', { class: 'dica', texto: 'Aviso para a equipe: não é diagnóstico e não muda a cor nem a pontuação.' }));
+}
 
-  cartoes.push(h('section', { class: 'cartao cor-cartao' },
+function renderAnalise() {
+  const painel = $('#painel');
+  if (estado.analisando) {
+    painel.replaceChildren(h('section', { class: 'cartao vazio', role: 'status' },
+      h('p', { class: 'analisando', texto: $('#extrator').value === 'mock' ? 'Analisando…' : 'Analisando o relato com o modelo local. Pode levar de 10 a 120 segundos…' }),
+      h('div', { class: 'controles centro' }, botaoVoltar('Cancelar e voltar à ficha'))));
+    return;
+  }
+  if (estado.erros || !estado.saida) {
+    const erros = estado.erros || ['Preencha a idade para analisar.'];
+    painel.replaceChildren(h('section', { class: 'cartao erro-cartao', role: 'alert' },
+      h('h3', { texto: 'Não foi possível analisar' }), h('p', { texto: 'Corrija o que está abaixo e analise de novo:' }),
+      h('ul', {}, erros.map((e) => h('li', { texto: e }))),
+      h('div', { class: 'controles' }, botaoVoltar(), h('button', { type: 'button', class: 'pilula', texto: 'Analisar de novo', onclick: analisar }))));
+    return;
+  }
+  const s = estado.saida, c = s.classificacao;
+  const topo = h('section', { class: 'cartao cor-cartao' },
     h('div', { class: 'cor-linha' },
       h('span', { class: `cor-selo cor-${c.cor}`, texto: `Cor sugerida: ${c.cor}` }),
       h('span', { class: 'nota' }, String(c.pontuacao), h('small', { texto: ' / 100 dentro da cor' }))),
@@ -434,40 +716,41 @@ function mostrarSaida(s) {
     h('p', { class: 'provisoria', texto: `Sugestão provisória. ${c.regras_validadas ? '' : 'As regras ainda não foram validadas por profissional de saúde. '}A decisão final é do profissional.` }),
     estado.reclassificando
       ? h('div', { class: 'controles' },
-        h('button', { type: 'button', class: 'pilula', texto: `Atualizar classificação do ${numeroFila(estado.reclassificando.numero)}`, onclick: (ev) => atualizarReclassificacao(ev.target, false) }),
+        h('button', { type: 'button', class: 'pilula enorme', texto: `Atualizar classificação do ${numeroFila(estado.reclassificando.numero)}`, onclick: (ev) => atualizarReclassificacao(ev.target, false) }),
+        botaoVoltar(),
         h('span', { class: 'dica', texto: `Cor atual na fila: ${CORES[estado.reclassificando.cor] ?? estado.reclassificando.cor}. Mantém número, QR e hora de chegada.` }))
-      : h('div', { class: 'controles' }, h('button', { type: 'button', class: 'pilula', texto: 'Colocar na fila', onclick: colocarNaFila }),
-        h('span', { class: 'dica', texto: 'Gera o número de atendimento e o QR do paciente.' }))));
+      : h('div', { class: 'controles' },
+        h('button', { type: 'button', class: 'pilula enorme', texto: 'Colocar na fila', onclick: colocarNaFila }),
+        botaoVoltar(),
+        h('span', { class: 'dica', texto: 'Gera o número de atendimento e o QR do paciente.' })));
 
-  if (s.proxima_pergunta) {
-    const p = estado.dados.perguntas.find((x) => x.id === s.proxima_pergunta);
-    cartoes.push(h('div', { class: 'proxima-pergunta' }, h('strong', { texto: 'Próxima pergunta:' }),
-      h('button', { type: 'button', onclick: () => irParaPergunta(p.id), texto: `${p.id} · ${p.texto}` })));
-  }
-
+  const cartoes = [];
   if (s.alertas.length) {
     const ordem = { grave: 0, atencao: 1, info: 2 };
-    const lista = [...s.alertas].sort((a, b) => ordem[(ALERTAS[a.codigo] || [, 'info'])[1]] - ordem[(ALERTAS[b.codigo] || [, 'info'])[1]]);
+    const nivel = (a) => (ALERTAS[a.codigo] || [null, 'info'])[1];
+    const lista = [...s.alertas].sort((a, b) => ordem[nivel(a)] - ordem[nivel(b)]);
     cartoes.push(secao(`Alertas (${s.alertas.length})`, h('ul', { class: 'alertas' }, lista.map((a) => {
-      const [nome, nivel] = ALERTAS[a.codigo] || [humanizar(a.codigo), 'info'];
-      return h('li', { class: `alerta ${nivel}` }, h('span', { class: 'cod', texto: nome }), h('span', { texto: a.mensagem }));
+      const [nome, niv] = ALERTAS[a.codigo] || [humanizar(a.codigo), 'info'];
+      return h('li', { class: `alerta ${niv}` }, h('span', { class: 'cod', texto: nome }), h('span', { texto: a.mensagem }));
     }))));
   }
+  const historico = cartaoDoHistoricoNaAnalise();
+  if (historico) cartoes.push(historico);
 
   const pend = s.perguntas_pendentes;
   cartoes.push(secao(`Perguntas pendentes (${pend.length})`,
-    pend.length ? h('div', { class: 'chips' }, pend.map((id) => h('button', { type: 'button', class: 'chip alerta-chip', onclick: () => irParaPergunta(id), texto: id })))
-      : h('p', { class: 'dica', texto: 'Nenhuma pergunta pendente.' }),
+    pend.length ? chipsDePendentes(pend) : h('p', { class: 'dica', texto: 'Nenhuma pergunta pendente.' }),
+    pend.length ? h('p', { class: 'dica', texto: 'Tocar numa pergunta volta à ficha, já no lugar dela.' }) : null,
     s.afericoes_faltando.length ? h('p', { class: 'dica', texto: `Aferições não registradas: ${s.afericoes_faltando.join(', ')} (valem como “não aferidas”).` }) : null));
 
   const al = s.alergias;
-  cartoes.push(secao('Alergias', h('p', {}, h('strong', { texto: STATUS[al.status] }),
+  cartoes.push(secao('Alergias', h('p', {}, h('strong', { texto: STATUS[al.status] ?? al.status }),
     al.itens.length ? ` — ${al.itens.join(', ')}` : '', al.tipos.length ? ` (${al.tipos.map(rotulo).join(', ')})` : ''),
   h('p', { class: 'dica', texto: 'Informação de segurança para a equipe; não entra na pontuação.' })));
 
   const ext = [];
   if (s.queixa_principal) ext.push(h('p', {}, h('strong', { texto: 'Queixa: ' }), s.queixa_principal));
-  if (s.queixas.length) ext.push(h('div', { class: 'chips' }, s.queixas.map((q) => h('span', { class: 'chip', texto: humanizar(q) }))));
+  if (s.queixas.length) ext.push(h('div', { class: 'chips' }, s.queixas.map((q) => h('span', { class: 'chip', texto: QUEIXAS[q] ?? humanizar(q) }))));
   if (s.duracao) ext.push(h('p', {}, h('strong', { texto: 'Duração: ' }), `${s.duracao.valor} ${s.duracao.unidade}`));
   ext.push(h('p', { class: 'dica', texto: `Leitura do relato: ${s.extrator}` }));
   cartoes.push(secao('Relato e duração', ...ext));
@@ -478,7 +761,7 @@ function mostrarSaida(s) {
   cartoes.push(secao(`Sinais presentes (${presentes.length})`,
     presentes.length ? h('ul', { class: 'lista-sinais' }, presentes.map(linhaSinal)) : h('p', { class: 'dica', texto: 'Nenhum sinal presente até agora.' }),
     desconhecidos.length ? h('div', {}, h('p', { class: 'rotulo-secao', texto: 'Sem resposta definitiva (não valem como “não”)' }),
-      h('ul', { class: 'lista-sinais' }, desconhecidos.map((x) => { const li = linhaSinal(x); li.prepend(h('span', { class: 'chip alerta-chip', texto: STATUS[x.status] })); return li; }))) : null,
+      h('ul', { class: 'lista-sinais' }, desconhecidos.map((x) => { const li = linhaSinal(x); li.prepend(h('span', { class: 'chip alerta-chip', texto: STATUS[x.status] ?? x.status })); return li; }))) : null,
     negados.length ? h('div', {}, h('p', { class: 'rotulo-secao', texto: 'Negados' }),
       h('div', { class: 'chips' }, negados.map((x) => h('span', { class: 'chip neutro', texto: nomeSinal(x.nome) })))) : null));
 
@@ -493,8 +776,7 @@ function mostrarSaida(s) {
       onclick(ev) { navigator.clipboard.writeText(json).then(() => { ev.target.textContent = 'Copiado'; }, () => { ev.target.textContent = 'Não foi possível copiar'; }); } })),
     h('pre', { texto: json }))));
 
-  painel.replaceChildren(...cartoes);
-  renderVoz();
+  painel.replaceChildren(topo, h('div', { class: 'analise-cartoes' }, cartoes));
 }
 
 /* ---------------------------------------------------------------- entrevista por voz */
@@ -502,7 +784,8 @@ function mostrarSaida(s) {
 // ficha sem o enfermeiro confirmar (Enter, botão ou toque direto na resposta).
 // Ordem: segurança -> relato -> pendências. A gravação para sozinha quando a fala termina.
 
-const voz = { pulados: new Set(), chave: null, gravador: null, pedacos: [], ocupado: false, resultado: null, limite: null, seguir: true, soltar: null };
+// `geracao` muda a cada ficha nova: o que foi gravado para um paciente nunca aparece na ficha do próximo
+const voz = { pulados: new Set(), chave: null, gravador: null, pedacos: [], ocupado: false, resultado: null, limite: null, seguir: true, soltar: null, abrindo: false, geracao: 0 };
 const FASES = ['Segurança', 'Relato', 'Complementares'];
 
 function partesPendentes(id) {
@@ -565,88 +848,115 @@ function aplicarValor(id, nomeParte, v) {
 }
 
 // Para a gravação sozinha: depois que alguém falou, `espera` ms de silêncio encerram.
-// O limiar acompanha o ruído do ambiente (sala cheia), medido no começo da gravação.
+// "Silêncio" é relativo: o limiar acompanha o ruído do ambiente (o piso desce na hora e sobe
+// devagar, então segue o barulho da sala) e o volume da própria fala (uma fração do pico recente).
+// Se não der para medir, nada quebra: o botão "Parar" e o tempo máximo continuam valendo.
+function pararEsta(rec) {
+  if (rec === voz.gravador) pararGravacao(); else if (rec.state === 'recording') rec.stop();
+}
+
 function vigiarSilencio(fluxo, rec, espera) {
   let ctx;
   try { ctx = new AudioContext(); } catch (e) { return () => {}; }
+  if (ctx.state === 'suspended') ctx.resume().catch(() => {});
   const analisador = ctx.createAnalyser();
   analisador.fftSize = 1024;
   ctx.createMediaStreamSource(fluxo).connect(analisador);
   const amostras = new Uint8Array(analisador.fftSize);
   const inicio = performance.now();
-  let piso = 1, falou = false, ultimoSom = inicio;
+  let piso = Infinity, pico = 0, falou = false, ultimoSom = inicio;
   const id = setInterval(() => {
     analisador.getByteTimeDomainData(amostras);
     let soma = 0;
     for (const a of amostras) { const x = (a - 128) / 128; soma += x * x; }
     const volume = Math.sqrt(soma / amostras.length);
     const agora = performance.now();
-    if (agora - inicio < 250) piso = Math.min(piso, volume);
-    const limiar = Math.max(0.02, Math.min(piso, 0.08) * 2.5);
+    piso = Math.min(volume, piso * 1.02);
+    pico = Math.max(pico * 0.985, volume);
+    const limiar = Math.max(0.02, Math.min(piso, 0.08) * 2.5, pico * 0.15);
     const barra = document.querySelector('#voz-nivel span');
     if (barra) barra.style.width = `${Math.min(100, Math.round(volume * 500))}%`;
     if (volume > limiar) { falou = true; ultimoSom = agora; }
-    else if (falou && agora - ultimoSom > espera && rec.state === 'recording') rec.stop();
+    else if (falou && agora - ultimoSom > espera && rec.state === 'recording') pararEsta(rec);
   }, 60);
   return () => { clearInterval(id); ctx.close().catch(() => {}); };
 }
 
 async function alternarGravacao() {
-  if (voz.gravador && voz.gravador.state === 'recording') { voz.gravador.stop(); return; }
-  if (voz.ocupado || !voz.passo) return;
+  if (voz.gravador && voz.gravador.state === 'recording') { pararGravacao(); return; }
+  if (voz.ocupado || voz.abrindo || !voz.passo) return; // `abrindo`: dois toques seguidos não abrem dois microfones
+  const geracao = voz.geracao;
   let fluxo;
+  voz.abrindo = true;
   try {
     fluxo = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, channelCount: 1 } });
   } catch (e) {
     voz.resultado = { erro: `Não foi possível usar o microfone (${e.message}). Autorize o microfone no navegador.` };
     renderVoz();
     return;
+  } finally {
+    voz.abrindo = false;
   }
+  const soltarMicrofone = () => fluxo.getTracks().forEach((t) => t.stop());
   const passo = voz.passo;
+  // enquanto o navegador pedia o microfone, a ficha ou a tela mudou: não grava
+  if (!passo || geracao !== voz.geracao || estado.passo !== 'ficha' || $('#tela-triagem').hidden) { soltarMicrofone(); return; }
   const parte = estado.perguntas[passo.id].partes[passo.parte].parte;
   const longa = parte.forma === 'texto';
-  const rec = new MediaRecorder(fluxo, { audioBitsPerSecond: 32000 });
+  let rec;
+  try {
+    rec = new MediaRecorder(fluxo, { audioBitsPerSecond: 32000 });
+  } catch (e) {
+    soltarMicrofone();
+    voz.resultado = { erro: `Este navegador não conseguiu gravar (${e.message}). Responda tocando ou na ficha.` };
+    renderVoz();
+    return;
+  }
   voz.pedacos = [];
   rec.ondataavailable = (ev) => { if (ev.data.size) voz.pedacos.push(ev.data); };
   rec.onstop = () => {
-    fluxo.getTracks().forEach((t) => t.stop());
+    soltarMicrofone();
     clearTimeout(voz.limite);
     if (voz.soltar) { voz.soltar(); voz.soltar = null; }
     const blob = new Blob(voz.pedacos, { type: rec.mimeType || 'audio/webm' });
     voz.pedacos = [];
-    enviarAudio(passo, blob);
+    if (geracao !== voz.geracao) { voz.ocupado = false; renderVoz(); return; } // a ficha mudou: o áudio é descartado aqui mesmo
+    if (!blob.size) { voz.ocupado = false; voz.resultado = { erro: 'Nada foi gravado. Toque em "Falar" e responda.' }; renderVoz(); return; }
+    enviarAudio(passo, blob, geracao);
   };
   voz.gravador = rec;
   voz.resultado = null;
   rec.start();
   voz.soltar = vigiarSilencio(fluxo, rec, longa ? 2500 : 800);
-  voz.limite = setTimeout(() => { if (rec.state === 'recording') rec.stop(); }, longa ? 90000 : 15000);
+  voz.limite = setTimeout(() => pararEsta(rec), longa ? 90000 : 15000);
   renderVoz();
 }
 
-async function enviarAudio(passo, blob) {
+async function enviarAudio(passo, blob, geracao) {
   voz.ocupado = true;
   renderVoz();
+  let resultado;
   try {
     const r = await fetch(`/api/voz?pergunta=${encodeURIComponent(passo.id)}&parte=${encodeURIComponent(passo.parte)}`,
       { method: 'POST', headers: { 'Content-Type': blob.type || 'audio/webm' }, body: blob });
     const corpo = await r.json();
-    voz.resultado = r.status === 200 ? { ...corpo, passo } : { erro: (corpo.erros || ['erro desconhecido']).join('; ') };
+    resultado = r.status === 200 ? { ...corpo, passo } : { erro: (corpo.erros || ['erro desconhecido']).join('; ') };
   } catch (e) {
-    voz.resultado = { erro: `Não foi possível falar com o servidor local (${e.message}).` };
-  } finally {
-    voz.ocupado = false;
-    renderVoz();
+    resultado = { erro: `Não foi possível falar com o servidor local (${e.message}).` };
   }
+  voz.ocupado = false;
+  if (geracao === voz.geracao) voz.resultado = resultado; // resposta de uma ficha que já foi trocada é ignorada
+  renderVoz();
 }
 
 async function confirmarVoz(valor) {
+  if (!voz.resultado || !voz.resultado.passo) return; // dois cliques seguidos em "Confirmar"
   const { passo } = voz.resultado;
   aplicarValor(passo.id, passo.parte, valor);
   voz.resultado = null;
   await calcular(); // recalcula na hora: alerta de sinal grave aparece já
   renderVoz();
-  if (voz.seguir && voz.passo) alternarGravacao(); // já ouve a próxima pergunta
+  if (voz.seguir && voz.passo && estado.passo === 'ficha' && !$('#tela-triagem').hidden) alternarGravacao(); // já ouve a próxima pergunta
 }
 
 // toque direto na resposta, sem passar pelo microfone
@@ -676,7 +986,7 @@ function resultadoPendente() {
 
 function teclaDeVoz(ev) {
   if (ev.ctrlKey || ev.altKey || ev.metaKey || ev.repeat) return;
-  if ($('#tela-triagem').hidden || $('#janela-qr').open || !estado.dados || !estado.dados.voz || !voz.passo) return;
+  if ($('#tela-triagem').hidden || estado.passo !== 'ficha' || $('#janela-qr').open || !estado.dados || !estado.dados.voz || !voz.passo) return;
   if (ev.target.closest && ev.target.closest('input, textarea, select, button, summary, a')) return;
   if (ev.code === 'Space') { ev.preventDefault(); alternarGravacao(); }
   else if (ev.key === 'Enter') {
@@ -707,16 +1017,11 @@ function renderVoz() {
   const faseAtual = passo ? passo.fase : FASES.length;
   const filhos = [h('div', { class: 'voz-topo' }, titulo,
     h('ol', { class: 'etapas', 'aria-label': 'Etapas da entrevista' }, FASES.map((nome, i) => h('li', {
-      class: i < faseAtual ? 'feita' : i === faseAtual ? 'atual' : '', 'aria-current': i === faseAtual ? 'step' : null, texto: `${i + 1}. ${nome}`,
+      class: i < faseAtual ? 'feita' : i === faseAtual ? 'atual' : '', 'aria-current': i === faseAtual ? 'step' : null, texto: nome,
     }))),
     passo ? h('span', { class: 'chip neutro', texto: passos.length === 1 ? 'falta 1 resposta' : `faltam ${passos.length} respostas` }) : null)];
-  const graves = (estado.saida ? estado.saida.alertas : []).filter((a) => a.codigo === 'sinal_de_alerta');
-  if (graves.length) {
-    filhos.push(h('div', { class: 'alerta grave', role: 'alert' }, h('span', { class: 'cod', texto: 'Sinal de alerta' }),
-      graves.map((a) => h('span', { texto: a.mensagem }))));
-  }
   if (!passo) {
-    filhos.push(h('p', { class: 'voz-fim', texto: 'Entrevista concluída. Revise o resultado ao lado e clique em "Colocar na fila".' }));
+    filhos.push(h('p', { class: 'voz-fim', texto: 'Entrevista concluída. Clique em "Analisar" para ver a cor, os alertas e o histórico.' }));
     if (voz.pulados.size) filhos.push(h('div', { class: 'controles' }, h('button', { type: 'button', class: 'pilula secundaria', texto: `Voltar às ${voz.pulados.size} pulada(s)`, onclick() { voz.pulados.clear(); renderVoz(); } })));
     caixa.replaceChildren(...filhos);
     return;
@@ -743,6 +1048,7 @@ function renderVoz() {
     if (r.entendido && parte.forma === 'texto') {
       const area = h('textarea', { rows: '4', maxlength: String(parte.max_caracteres ?? 1000), 'aria-label': 'Texto transcrito' });
       area.value = r.valor;
+      area.addEventListener('input', () => { r.valor = area.value; }); // a correção sobrevive a um redesenho do painel
       filhos.push(h('div', { class: 'voz-resultado' }, ouvi, area,
         h('div', { class: 'controles' }, h('button', { type: 'button', class: 'pilula', texto: 'Confirmar', onclick: () => confirmarVoz(area.value.trim()) }),
           h('button', { type: 'button', class: 'pilula secundaria', texto: 'Falar de novo', onclick: alternarGravacao }))));
@@ -775,21 +1081,33 @@ const numeroFila = (n) => String(n).padStart(3, '0');
 
 async function postar(url, corpo) {
   const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo) });
-  return { status: r.status, corpo: await r.json() };
+  let dados = {};
+  try { dados = await r.json(); } catch (e) { /* resposta sem JSON (ex.: servidor reiniciando) */ }
+  return { status: r.status, corpo: dados };
 }
 
+function falhaNaAnalise(erros) {
+  estado.erros = erros;
+  renderTudo();
+}
+
+// Passo 3: só existe depois da análise (o botão fica no cartão da cor).
 async function colocarNaFila(ev) {
   const botao = ev.target;
+  if (estado.analisando || estado.enviando || estado.passo !== 'analise') return;
   botao.disabled = true;
+  estado.enviando = true;
   try {
     // o servidor processa a ficha de novo: a cor nunca sai do navegador
     const { status, corpo } = await postar('/api/fila', { ficha: lerFicha(), extrator: $('#extrator').value });
-    if (status !== 200) { mostrarErros(corpo.erros || ['erro desconhecido']); return; }
+    if (status !== 200) { falhaNaAnalise(corpo.erros || ['erro desconhecido']); return; }
+    novaFicha(); // a ficha deste paciente terminou: evita colocar a mesma pessoa duas vezes
     mostrarQR(corpo, true);
     carregarFila();
   } catch (e) {
-    mostrarErros([`Não foi possível falar com o servidor local (${e.message}).`]);
+    falhaNaAnalise([`Não foi possível falar com o servidor local (${e.message}).`]);
   } finally {
+    estado.enviando = false;
     botao.disabled = false;
   }
 }
@@ -804,17 +1122,28 @@ function mostrarQR(r, nova) {
     ? 'O paciente aponta a câmera do celular (no Wi-Fi da unidade) para ver a cor, o motivo e a faixa da fila.'
     : 'A página do paciente está desligada (--sem-paciente); informe só o número de atendimento.';
   $('#qr-url').textContent = r.url || '';
+  $('#qr-fechar').textContent = nova ? 'Ver a fila' : 'Fechar';
+  $('#qr-fechar').dataset.destino = nova ? 'fila' : '';
   $('#qr-nova').hidden = !nova;
   $('#janela-qr').showModal();
 }
 
-/* reclassificação: a ficha guardada volta para a aba Triagem; o paciente mantém número e QR */
+/* reclassificação: a ficha guardada volta para o passo 1; o paciente mantém número e QR */
 
 function novaFicha() {
   estado.reclassificando = null;
+  estado.seqAnalise += 1;
+  estado.analisando = false;
+  estado.pedeIdade = false;
   renderModo();
+  voz.geracao += 1; // o que estiver sendo gravado ou transcrito era da ficha anterior
+  pararGravacao();
   voz.pulados.clear(); voz.resultado = null;
-  preencher({}); $('#exemplo').value = ''; $('#painel').dataset.desatualizado = ''; calcular();
+  clearTimeout(estado.timer);
+  preencher({}); $('#exemplo').value = '';
+  limparHistorico();
+  irParaPasso('ficha', true);
+  calcular();
 }
 
 function renderModo() {
@@ -823,23 +1152,32 @@ function renderModo() {
   caixa.hidden = !r;
   // durante a reclassificação não dá para carregar um exemplo por cima da ficha do paciente
   $('#exemplo').disabled = Boolean(r);
+  $('#titulo-entrevista').textContent = r ? `Reclassificação do ${numeroFila(r.numero)}` : 'Nova triagem';
   if (!r) { caixa.replaceChildren(); return; }
   caixa.replaceChildren(
     h('span', {}, h('strong', { texto: `Reclassificando o paciente ${numeroFila(r.numero)}` }),
-      ` · cor atual na fila: ${CORES[r.cor] ?? r.cor}. Ajuste a ficha e clique em "Atualizar classificação".`),
+      ` · cor atual na fila: ${CORES[r.cor] ?? r.cor}. Ajuste a ficha, clique em "Analisar de novo" e depois em "Atualizar classificação".`),
     h('button', { type: 'button', class: 'pilula secundaria', texto: 'Cancelar', onclick: novaFicha }));
 }
 
 async function iniciarReclassificacao(numero) {
-  const { status, corpo } = await postar('/api/fila/ficha', { numero });
+  let resposta;
+  try {
+    resposta = await postar('/api/fila/ficha', { numero });
+  } catch (e) { carregarFila(); return; }
+  const { status, corpo } = resposta;
   if (status !== 200) { carregarFila(); return; }
   if (!corpo.ficha) {
     window.alert('Este paciente entrou na fila antes da reclassificação existir: a ficha não foi guardada. Faça uma nova triagem.');
     return;
   }
+  const atual = lerFicha();
+  const emAndamento = !estado.reclassificando && (Object.keys(atual.dados_atendente).length || Object.keys(atual.respostas).length);
+  if (emAndamento && !window.confirm(`Há uma ficha em preenchimento na aba Triagem.
+
+Reclassificar o ${numeroFila(numero)} agora apaga o que foi digitado nela. Continuar?`)) return;
+  novaFicha();
   estado.reclassificando = { numero, cor: corpo.cor };
-  voz.pulados.clear(); voz.resultado = null;
-  $('#exemplo').value = '';
   if (corpo.extrator && [...$('#extrator').options].some((o) => o.value === corpo.extrator)) { $('#extrator').value = corpo.extrator; textoExtrator(); }
   preencher(corpo.ficha);
   mostrarTela('triagem');
@@ -850,7 +1188,9 @@ async function iniciarReclassificacao(numero) {
 
 async function atualizarReclassificacao(botao, confirmar) {
   const r = estado.reclassificando;
+  if (!r || estado.analisando || (estado.enviando && !confirmar)) return;
   botao.disabled = true;
+  estado.enviando = true;
   try {
     const { status, corpo } = await postar('/api/fila/reclassificar',
       { numero: r.numero, ficha: lerFicha(), extrator: $('#extrator').value, confirmar_reducao: confirmar });
@@ -859,7 +1199,9 @@ async function atualizarReclassificacao(botao, confirmar) {
       if (ok) await atualizarReclassificacao(botao, true);
       return;
     }
-    if (status !== 200) { mostrarErros(corpo.erros || ['erro desconhecido']); return; }
+    if (status !== 200) { falhaNaAnalise(corpo.erros || ['erro desconhecido']); return; }
+    novaFicha();
+    mostrarTela('fila');
     $('#titulo-qr').textContent = 'Classificação atualizada';
     $('#qr-numero').textContent = numeroFila(corpo.numero);
     $('#qr-imagem').hidden = true;
@@ -867,23 +1209,26 @@ async function atualizarReclassificacao(botao, confirmar) {
       ? `Cor mantida: ${CORES[corpo.cor_depois]} (pontuação ${corpo.pontuacao_antes} → ${corpo.pontuacao_depois}).`
       : `Cor: ${CORES[corpo.cor_antes]} → ${CORES[corpo.cor_depois]}. O QR do paciente já mostra a nova classificação.`;
     $('#qr-url').textContent = '';
+    $('#qr-fechar').textContent = 'Fechar';
+    $('#qr-fechar').dataset.destino = '';
     $('#qr-nova').hidden = true;
     $('#janela-qr').showModal();
-    novaFicha();
-    mostrarTela('fila');
   } catch (e) {
-    mostrarErros([`Não foi possível falar com o servidor local (${e.message}).`]);
+    falhaNaAnalise([`Não foi possível falar com o servidor local (${e.message}).`]);
   } finally {
+    estado.enviando = false;
     botao.disabled = false;
   }
 }
 
 function mostrarTela(qual) {
   const fila = qual === 'fila';
+  if (fila) pararGravacao();
   $('#tela-triagem').hidden = fila;
   $('#tela-fila').hidden = !fila;
   $('#aba-triagem').setAttribute('aria-pressed', String(!fila));
   $('#aba-fila').setAttribute('aria-pressed', String(fila));
+  atualizarMini();
   if (fila) carregarFila();
 }
 
@@ -891,9 +1236,8 @@ async function acaoFila(rota, numero) {
   try {
     const { status, corpo } = await postar(rota, { numero });
     if (rota === '/api/fila/qr' && status === 200) mostrarQR(corpo, false);
-  } finally {
-    carregarFila();
-  }
+  } catch (e) { /* sem rede: a lista abaixo mostra o erro */ }
+  carregarFila();
 }
 
 const avisosVistos = new Set(); // ids já anunciados com som
@@ -984,10 +1328,12 @@ function listaRecemChamados(lista) {
     h('p', { class: 'dica', texto: 'Clicou no paciente errado? "Desfazer" devolve para a fila com o mesmo número e QR. Vale por 10 minutos.' })];
 }
 
-async function carregarFila() {
+// `automatico`: chamada feita pelo relógio da página. O servidor não conta como uso da sessão,
+// para o login expirar se o computador ficar parado.
+async function carregarFila(automatico = false) {
   let dados;
   try {
-    dados = await (await fetch('/api/fila')).json();
+    dados = await (await fetch('/api/fila', automatico ? { headers: { 'X-Salus-Automatico': '1' } } : undefined)).json();
   } catch (e) {
     $('#lista-fila').replaceChildren(h('p', { class: 'dica', texto: `Não foi possível carregar a fila (${e.message}).` }));
     return;
@@ -1013,10 +1359,8 @@ async function carregarFila() {
 function textoExtrator() {
   const e = $('#extrator').value;
   $('#dica-extrator').textContent = e === 'mock'
-    ? 'Leitura por palavras-chave, sem rede. Atualiza enquanto você digita.'
-    : 'Usa o modelo local (Ollama). Pode levar de 10 a 120 segundos na primeira vez; clique em "Analisar". Se o modelo estiver fora do ar, a ficha sai só com as respostas diretas.';
-  $('#auto').disabled = e !== 'mock';
-  $('#analisar').hidden = e === 'mock' && $('#auto').checked;
+    ? 'Leitura do relato por palavras-chave, sem rede e na hora.'
+    : 'Ao clicar em "Analisar", o relato é lido pelo modelo local (Ollama); pode levar de 10 a 120 segundos na primeira vez. Enquanto você preenche, as pendências usam a leitura por palavras-chave. Se o modelo estiver fora do ar, a análise sai só com as respostas diretas.';
 }
 
 async function iniciar() {
@@ -1026,9 +1370,12 @@ async function iniciar() {
     estado.exemplos = await re.json();
   } catch (e) {
     $('#painel').replaceChildren(h('div', { class: 'cartao erro-cartao' }, h('p', { texto: `Não foi possível carregar o questionário: ${e.message}` })));
+    $('#passo-ficha').hidden = true;
+    $('#passo-analise').hidden = false;
     return;
   }
   const q = estado.dados;
+  if (!q.historico) q.historico = { ligado: false, exemplos: [] };
   try {
     const eu = await (await fetch('/api/eu')).json();
     if (eu && eu.login) { $('#usuario-nome').textContent = eu.nome; $('#usuario').hidden = false; }
@@ -1041,29 +1388,34 @@ async function iniciar() {
   construirCadastro();
   construirPerguntas(q);
   textoExtrator();
-  renderVoz();
+  irParaPasso('ficha', true);
 
   $('#exemplo').addEventListener('change', (ev) => {
     if (ev.target.value === '') return;
     preencher(estado.exemplos[Number(ev.target.value)].ficha);
     calcular();
   });
-  $('#limpar').addEventListener('click', novaFicha);
-  $('#analisar').addEventListener('click', () => { clearTimeout(estado.timer); calcular(); });
-  $('#extrator').addEventListener('change', () => { textoExtrator(); agendar(); });
-  $('#auto').addEventListener('change', () => { textoExtrator(); agendar(); });
+  $('#limpar').addEventListener('click', () => { novaFicha(); window.scrollTo({ top: 0 }); });
+  $('#mini').addEventListener('click', analisar);
+  $('#passo-1').addEventListener('click', () => { if (estado.passo !== 'ficha') voltarParaFicha(); });
+  $('#passo-2').addEventListener('click', () => { if (estado.passo !== 'analise') analisar(); });
+  $('#extrator').addEventListener('change', textoExtrator);
 
   document.addEventListener('keydown', teclaDeVoz);
   $('#aba-triagem').addEventListener('click', () => mostrarTela('triagem'));
   $('#aba-fila').addEventListener('click', () => mostrarTela('fila'));
-  $('#qr-fechar').addEventListener('click', () => $('#janela-qr').close());
+  $('#qr-fechar').addEventListener('click', (ev) => {
+    const destino = ev.target.dataset.destino;
+    $('#janela-qr').close();
+    if (destino === 'fila') mostrarTela('fila');
+  });
   $('#qr-nova').addEventListener('click', () => {
     $('#janela-qr').close();
-    novaFicha();
+    mostrarTela('triagem');
     window.scrollTo({ top: 0 });
   });
   carregarFila();
-  setInterval(() => { if (!document.hidden) carregarFila(); }, 5000);
+  setInterval(() => { if (!document.hidden) carregarFila(true); }, 5000);
 }
 
 iniciar();

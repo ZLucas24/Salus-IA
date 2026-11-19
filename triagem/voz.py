@@ -29,6 +29,7 @@ log = logging.getLogger("triagem.voz")
 
 MODELO_PADRAO = "small"        # relato livre: precisa de mais acerto
 MODELO_RAPIDO_PADRAO = "base"  # respostas curtas: ~3x mais rápido em CPU
+MAX_TOKENS_CURTA = 24
 
 
 class ErroVoz(RuntimeError):
@@ -75,7 +76,7 @@ class TranscritorWhisper(Transcritor):
     def carregar(self, nome: str | None = None):
         """Carrega (uma vez) o modelo pedido; sem nome, carrega os dois."""
         if nome is None:
-            self.carregar(self.rapido_nome)
+            self._rapido()
             return self.carregar(self.modelo_nome)
         with self._trava:
             if nome not in self._modelos:
@@ -88,19 +89,39 @@ class TranscritorWhisper(Transcritor):
                     modelo = WhisperModel(nome, device="cpu", compute_type="int8", local_files_only=True)
                 except Exception:
                     log.info("modelo %s ainda não baixado; baixando (só na primeira vez)", nome)
-                    modelo = WhisperModel(nome, device="cpu", compute_type="int8")
+                    try:
+                        modelo = WhisperModel(nome, device="cpu", compute_type="int8")
+                    except Exception as e:
+                        raise ErroVoz(f"não foi possível carregar o modelo de voz '{nome}' "
+                                      f"(sem internet para baixar? {type(e).__name__})") from e
                 self._modelos[nome] = modelo
             return self._modelos[nome]
 
+    def _rapido(self):
+        """Modelo das respostas curtas. Se ele não carregar (ex.: máquina sem internet para o
+        primeiro download), as respostas curtas passam a usar o modelo principal: mais lento,
+        mas a voz continua funcionando."""
+        if self.tem_reserva:
+            try:
+                return self.carregar(self.rapido_nome)
+            except ErroVoz as e:
+                log.warning("%s; as respostas curtas vão usar o modelo %s", e, self.modelo_nome)
+                self.rapido_nome, self.tem_reserva = self.modelo_nome, False
+                self.nome = f"whisper:{self.modelo_nome}"
+        return self.carregar(self.modelo_nome)
+
     def transcrever(self, audio: bytes, curta: bool = False, dica: str | None = None,
                     preciso: bool = False) -> str:
-        modelo = self.carregar(self.rapido_nome if curta and not preciso else self.modelo_nome)
+        modelo = self._rapido() if curta and not preciso else self.carregar(self.modelo_nome)
         amostras = decodificar(audio)
         try:
             # busca gulosa, sem marcas de tempo e sem VAD: a gravação já chega recortada pela página
             segmentos, _ = modelo.transcribe(
                 amostras, language="pt", beam_size=1 if curta else 3, temperature=0.0,
                 without_timestamps=True, condition_on_previous_text=False, vad_filter=not curta,
+                # resposta curta tem poucas palavras: o limite impede o modelo de "inventar" um
+                # texto longo (e demorar segundos) quando o áudio é ruim
+                max_new_tokens=MAX_TOKENS_CURTA if curta else None,
                 initial_prompt=dica or self.DICA)
             return " ".join(s.text.strip() for s in segmentos).strip()
         except Exception as e:

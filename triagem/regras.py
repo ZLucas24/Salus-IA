@@ -30,7 +30,11 @@ def _validar_condicao(regra_id: str, cond) -> None:
 @lru_cache(maxsize=1)
 def carregar_regras() -> dict:
     with open(CAMINHO_REGRAS, encoding="utf-8-sig") as f:
-        regras = json.load(f)
+        return validar_regras(json.load(f))
+
+
+def validar_regras(regras: dict) -> dict:
+    """Confere o arquivo de regras inteiro; levanta RegrasInvalidas no primeiro problema."""
     pont = regras["pontuacao"]
     nomes = {n.value for n in NomeSinal}
     for nome, peso in pont["pesos"].items():
@@ -57,4 +61,11 @@ def carregar_regras() -> dict:
         raise RegrasInvalidas("fila.tempos_alvo_minutos deve ter exatamente uma entrada por cor")
     if any(not isinstance(t, int) or t < 0 for t in tempos.values()):
         raise RegrasInvalidas("fila.tempos_alvo_minutos: use minutos inteiros >= 0")
+    historico = regras.get("historico")
+    if not isinstance(historico, dict):
+        raise RegrasInvalidas("falta a seção historico (limites do cruzamento com o histórico)")
+    for chave in ("retorno_precoce_dias", "janela_retorno_dias", "atendimentos_para_retorno_frequente"):
+        v = historico.get(chave)
+        if not isinstance(v, int) or isinstance(v, bool) or v < 1:
+            raise RegrasInvalidas(f"historico.{chave}: use um inteiro >= 1")
     return regras

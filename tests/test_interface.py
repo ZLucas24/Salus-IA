@@ -183,3 +183,44 @@ def test_estilo_dinamico_vai_pelo_cssom_por_causa_da_csp():
     js = (PASTA_ESTATICA / "app.js").read_text(encoding="utf-8")
     assert "el.style.cssText = v" in js and "setAttribute('style'" not in js
     assert "style=" not in (PASTA_ESTATICA / "index.html").read_text(encoding="utf-8")
+
+
+# --- três passos: ficha -> análise -> fila ---------------------------------------------------------
+
+def _funcao(js: str, nome: str) -> str:
+    """Corpo de uma função do app.js (até a próxima função ou seção no nível de cima)."""
+    inicio = js.index(f"function {nome}(")
+    fins = [p for p in (js.find("\nfunction ", inicio + 1), js.find("\nasync function ", inicio + 1),
+                        js.find("\n/* ---", inicio + 1)) if p != -1]
+    return js[inicio:min(fins)]
+
+
+def test_a_triagem_tem_tres_passos_e_a_analise_comeca_escondida():
+    html = (PASTA_ESTATICA / "index.html").read_text(encoding="utf-8")
+    for trecho in ('id="passo-1"', 'id="passo-2"', 'id="passo-3"', 'id="passo-ficha"', 'id="passo-analise" hidden',
+                   'id="alerta-imediato"', 'id="historico"'):
+        assert trecho in html, trecho
+    assert "Colocar na fila" not in html and "cor-selo" not in html  # nada de resultado no HTML inicial
+
+
+def test_o_botao_da_fila_so_existe_na_tela_da_analise():
+    js = (PASTA_ESTATICA / "app.js").read_text(encoding="utf-8")
+    assert js.count("texto: 'Colocar na fila'") == 1 and "texto: 'Colocar na fila'" in _funcao(js, "renderAnalise")
+    assert "estado.passo !== 'analise'" in _funcao(js, "colocarNaFila")  # e a função recusa fora dela
+    assert "novaFicha()" in _funcao(js, "colocarNaFila")  # ficha limpa depois: o paciente não entra duas vezes
+    for nome in ("renderResumo", "renderImediato", "renderVoz", "renderHistorico"):
+        corpo = _funcao(js, nome)
+        assert "cor-selo" not in corpo and "pontuacao" not in corpo, nome  # passo 1 não mostra cor nem pontuação
+
+
+def test_o_prontuario_nao_entra_na_ficha_nem_em_endereco():
+    js = (PASTA_ESTATICA / "app.js").read_text(encoding="utf-8")
+    assert "prontuario" not in _funcao(js, "lerFicha")
+    assert "?prontuario" not in js and "prontuario=" not in js.replace("envio.prontuario =", "")
+    assert "postar('/api/historico', { prontuario: valor })" in js
+
+
+def test_preenchimento_usa_palavras_chave_e_so_a_analise_usa_o_leitor_escolhido():
+    js = (PASTA_ESTATICA / "app.js").read_text(encoding="utf-8")
+    assert "async function calcular(extrator = 'mock')" in js
+    assert js.count("calcular($('#extrator').value)") == 1 and "calcular($('#extrator').value)" in _funcao(js, "analisar")

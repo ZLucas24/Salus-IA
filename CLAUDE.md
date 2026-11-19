@@ -34,6 +34,10 @@ Python 3.11+. Pacote `triagem`, executado com `python -m triagem`.
 - `triagem/dados/regras.json`: limites das aferições, pesos e regras de cor.
 - `triagem/interface/`: interface web local (stdlib; `python -m triagem.interface`). O formulário
   nasce do questionário; a página nunca usa `innerHTML` nem recursos externos (há teste).
+  A triagem tem 3 passos: ficha -> análise -> fila. Cor e pontuação só aparecem na análise e o
+  botão da fila só existe nela; a exceção é o sinal de alerta (regra laranja/vermelha), que aparece
+  na hora, no passo 1. Durante o preenchimento a leitura do relato é sempre por palavras-chave; o
+  extrator escolhido roda só no "Analisar" e a leitura dele é reaproveitada na entrada na fila.
 - `triagem/fila.py` e `triagem/interface/paciente.py`: fila (SQLite) e página do paciente pelo QR.
   A página do paciente é outro servidor; a única escrita é o aviso de piora (motivo de lista fixa,
   sem texto livre), que alerta a equipe e NUNCA muda cor nem posição. Nunca mostra pontuação,
@@ -41,6 +45,11 @@ Python 3.11+. Pacote `triagem`, executado com `python -m triagem`.
   Reclassificar mantém número, QR e chegada; baixar a cor exige `confirmar_reducao: true`.
   Chamar já marca como atendido (um clique); por 10 minutos dá para desfazer e, depois disso,
   a ficha guardada é apagada.
+- `triagem/historico.py`: histórico do paciente atrás da interface `FonteHistorico` (hoje, pacientes
+  inventados em `dados/historico_simulado.json`) e cruzamento com a ficha por REGRA EM CÓDIGO, sem IA.
+  O cruzamento só gera avisos: nunca é diagnóstico e nunca muda cor nem pontuação (roda depois da
+  classificação; há teste). O prontuário não entra na ficha, na fila nem na base de treino. Os
+  limites ficam em `regras.json` (`historico`), não validados.
 - `triagem/voz.py`: entrevista por voz (opcional, `requirements-voz.txt`). Dois modelos locais
   (rápido para resposta curta, maior para o relato e como reserva). Transcrição local, áudio
   nunca salvo; a fala vira resposta por código, dúvida vira `nao_sabe` (nunca "não") e nada entra

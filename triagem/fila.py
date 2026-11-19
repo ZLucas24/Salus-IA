@@ -25,7 +25,17 @@ from triagem.schema import Classificacao
 from triagem.sinais import Cor
 
 AGUARDANDO, CHAMADO, ATENDIDO = "aguardando", "chamado", "atendido"
-FORMATO_TOKEN = re.compile(r"^[A-Za-z0-9_-]{20,64}$")
+FORMATO_TOKEN = re.compile(r"[A-Za-z0-9_-]{20,64}")
+NUMERO_MAXIMO = 2 ** 31 - 1  # acima disso o SQLite recusa o inteiro; nenhuma fila chega perto
+
+
+def numero_valido(numero) -> bool:
+    """Número de atendimento: inteiro positivo (nunca bool, texto ou número gigante)."""
+    return isinstance(numero, int) and not isinstance(numero, bool) and 0 < numero <= NUMERO_MAXIMO
+
+
+def token_valido(token) -> bool:
+    return isinstance(token, str) and FORMATO_TOKEN.fullmatch(token) is not None
 
 # Aviso de piora: o paciente escolhe UM motivo da lista (sem texto livre). O aviso NÃO muda
 # a cor nem a posição; só alerta a equipe, que decide o que fazer.
@@ -164,7 +174,7 @@ class Fila:
 
     def ficha(self, numero: int) -> dict | None:
         """Ficha guardada de quem ainda está na fila."""
-        if not isinstance(numero, int) or isinstance(numero, bool):
+        if not numero_valido(numero):
             return None
         with self._trava:
             p = self._con.execute("SELECT * FROM pacientes WHERE numero = ? AND estado != ?",
@@ -183,7 +193,7 @@ class Fila:
         do enfermeiro). Reclassificar marca como vistos os avisos de piora pendentes do paciente.
         Devolve {"ok": True, ...} ou {"ok": False, "motivo": "nao_encontrado" | "precisa_confirmar", ...}.
         """
-        if not isinstance(numero, int) or isinstance(numero, bool):
+        if not numero_valido(numero):
             return {"ok": False, "motivo": "nao_encontrado"}
         agora = self._relogio()
         nova = classificacao.cor
@@ -212,6 +222,8 @@ class Fila:
         return {"ok": True, **resumo}
 
     def historico(self, numero: int) -> list[dict]:
+        if not numero_valido(numero):
+            return []
         with self._trava:
             linhas = self._con.execute(
                 "SELECT cor_antes, cor_depois, pontuacao_antes, pontuacao_depois, em, por FROM reclassificacoes "
@@ -223,7 +235,7 @@ class Fila:
 
         Por `JANELA_CHAMADA_S` a chamada pode ser desfeita com `devolver` e o QR do paciente
         mostra "Você foi chamado". Passada a janela, a ficha guardada é apagada."""
-        if not isinstance(numero, int) or isinstance(numero, bool):
+        if not numero_valido(numero):
             return False
         agora = self._relogio()
         with self._trava, self._con:
@@ -235,7 +247,7 @@ class Fila:
     def devolver(self, numero: int) -> bool:
         """Desfaz uma chamada recente (clique errado): o paciente volta para a fila com o mesmo
         número, QR e hora de chegada. Só vale dentro de `JANELA_CHAMADA_S`."""
-        if not isinstance(numero, int) or isinstance(numero, bool):
+        if not numero_valido(numero):
             return False
         with self._trava, self._con:
             cur = self._con.execute(
@@ -247,7 +259,7 @@ class Fila:
     def concluir(self, numero: int, por: str | None = None) -> bool:
         """Retira da fila SEM chamar (desistiu, foi embora). Não pode ser desfeito: o QR deixa de
         valer e a ficha guardada e o vínculo com a base de treino são apagados na hora."""
-        if not isinstance(numero, int) or isinstance(numero, bool):
+        if not numero_valido(numero):
             return False
         with self._trava, self._con:
             cur = self._con.execute(
@@ -275,7 +287,7 @@ class Fila:
 
     def avisar_piora(self, token: str, motivo: str) -> str:
         """Paciente avisa que piorou. Devolve AVISO_OK, AVISO_ESPERA (aviso recente) ou AVISO_INVALIDO."""
-        if motivo not in MOTIVOS_PIORA or not isinstance(token, str) or not FORMATO_TOKEN.match(token):
+        if motivo not in MOTIVOS_PIORA or not token_valido(token):
             return AVISO_INVALIDO
         agora = self._relogio()
         with self._trava, self._con:
@@ -291,7 +303,7 @@ class Fila:
         return AVISO_OK
 
     def marcar_aviso_visto(self, numero: int, por: str | None = None) -> bool:
-        if not isinstance(numero, int) or isinstance(numero, bool):
+        if not numero_valido(numero):
             return False
         with self._trava, self._con:
             cur = self._con.execute(
@@ -338,7 +350,7 @@ class Fila:
     def status_paciente(self, token: str) -> dict | None:
         """Visão do paciente. None se o código não existe ou deixou de valer (retirado da fila,
         ou chamado há mais de `JANELA_CHAMADA_S`). Quem acabou de ser chamado vê "chamado"."""
-        if not isinstance(token, str) or not FORMATO_TOKEN.match(token):
+        if not token_valido(token):
             return None
         with self._trava:
             p = self._con.execute("SELECT * FROM pacientes WHERE token = ?", (token,)).fetchone()

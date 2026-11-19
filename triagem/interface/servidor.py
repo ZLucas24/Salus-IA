@@ -7,10 +7,12 @@ Escuta apenas em 127.0.0.1 e serve:
   GET  /api/exemplos          as fichas de `exemplos/`
   POST /api/triagem           {"ficha": {...}, "extrator": "mock"} -> {"saida": {...}}
                               ou 422 {"erros": [...]} quando a ficha é inválida
-  GET  /api/fila              pacientes chamados e aguardando, em ordem
+                              com "prontuario", acrescenta "historico" (padrões; não muda a saída)
+  GET  /api/fila              quem aguarda (em ordem), avisos de piora e chamados há pouco
   POST /api/fila              {"ficha": {...}, "extrator": "mock"} -> {"numero", "url", "qr"}
                               (a ficha é processada de novo aqui; o navegador não manda a cor)
   POST /api/fila/qr           {"numero": 7} -> {"numero", "url", "qr"} (mostrar o QR de novo)
+  POST /api/historico         {"prontuario": "100001"} -> histórico do paciente (fonte simulada)
   POST /api/fila/chamar       {"numero": 7} (chama e já marca como atendido)
   POST /api/fila/devolver     {"numero": 7} (desfaz uma chamada recente)
   POST /api/fila/concluir     {"numero": 7} (retira da fila sem chamar; o QR deixa de valer)
@@ -35,11 +37,13 @@ checagem de Host e Origin (contra DNS rebinding e requisições de outros sites)
 limite de tamanho, cabeçalhos restritivos e nenhum arquivo servido fora da lista.
 """
 
+import hashlib
 import json
 import logging
 import re
 import sys
 import threading
+import time
 from http import HTTPStatus
 from http.cookies import SimpleCookie
 from urllib.parse import parse_qs
@@ -47,13 +51,14 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from triagem.entrevista import FichaInvalida, processar_ficha
-from triagem.fila import Fila
+from triagem.fila import Fila, numero_valido
 from triagem.extracao import NOME_PADRAO, NOMES_EXTRATORES, Extracao, Extrator, criar_extrator
 from triagem.questionario import carregar_questionario
 from triagem.regras import carregar_regras
 from triagem.schema import Classificacao
 from triagem.treino import BaseTreino
 from triagem.usuarios import SESSAO_MAX_S, Usuarios
+from triagem.historico import FonteHistorico, HistoricoSimulado, consultar, prontuario_valido
 from triagem.voz import (ErroVoz, Transcritor, TranscritorWhisper, dica_da_parte, forma_curta, interpretar_fala,
                          whisper_instalado)
 
@@ -77,7 +82,9 @@ CABECALHOS_SEGURANCA = {
 }
 COOKIE = "salus_sessao"
 LIVRES = {"/login", "/estatico/estilo.css"}   # o resto exige sessão
-NOME_ARQUIVO = re.compile(r"^[a-z0-9_.-]+$")
+NOME_ARQUIVO = re.compile(r"[a-z0-9_.-]+")
+LIMITE_DESCARTE = 64_000
+CABECALHO_AUTOMATICO = "X-Salus-Automatico"  # consulta feita pelo relógio da página, não pelo enfermeiro
 
 
 def dados_para_interface() -> dict:
@@ -132,15 +139,64 @@ def listar_exemplos() -> list[dict]:
     return exemplos
 
 
+class CacheDeLeitura:
+    """Guarda por alguns minutos a leitura do relato feita por um MODELO (a de palavras-chave é
+    instantânea e não precisa). Assim a entrada na fila reutiliza exatamente a leitura que o
+    enfermeiro acabou de ver na análise: não espera o modelo de novo e não corre o risco de a
+    fila registrar uma cor diferente da que estava na tela. Só na memória; a chave é um resumo
+    (hash) do relato, não o texto. Leitura que falhou nunca é guardada."""
+
+    def __init__(self, validade_s: float = 600, maximo: int = 32, relogio=time.monotonic):
+        self._validade, self._maximo, self._relogio = validade_s, maximo, relogio
+        self._itens: dict[tuple[str, str], tuple[float, Extracao]] = {}
+        self._trava = threading.Lock()
+
+    @staticmethod
+    def _chave(extrator: str, relato: str) -> tuple[str, str]:
+        return extrator, hashlib.sha256(relato.encode("utf-8")).hexdigest()
+
+    def obter(self, extrator: str, relato: str) -> Extracao | None:
+        chave, agora = self._chave(extrator, relato), self._relogio()
+        with self._trava:
+            item = self._itens.get(chave)
+            if item is None or agora - item[0] > self._validade:
+                self._itens.pop(chave, None)
+                return None
+            return item[1].model_copy(deep=True)
+
+    def guardar(self, extrator: str, relato: str, extracao: Extracao) -> None:
+        agora = self._relogio()
+        with self._trava:
+            self._itens = {k: v for k, v in self._itens.items() if agora - v[0] <= self._validade}
+            while len(self._itens) >= self._maximo:
+                del self._itens[min(self._itens, key=lambda k: self._itens[k][0])]
+            self._itens[self._chave(extrator, relato)] = (agora, extracao.model_copy(deep=True))
+
+    def limpar(self) -> None:
+        with self._trava:
+            self._itens.clear()
+
+
+CACHE_DE_LEITURA = CacheDeLeitura()
+
+
 class ExtratorGravador(Extrator):
     """Repassa ao extrator real e guarda a leitura CRUA do relato (antes da mescla com as
-    respostas diretas), que é o que interessa à base de treino."""
+    respostas diretas), que é o que interessa à base de treino. Com `cache`, reaproveita a
+    leitura recente do mesmo relato."""
 
-    def __init__(self, real: Extrator):
-        self.real, self.nome, self.extracao = real, real.nome, None
+    def __init__(self, real: Extrator, cache: CacheDeLeitura | None = None):
+        self.real, self.nome, self.extracao, self.cache = real, real.nome, None, cache
 
     def extrair(self, relato: str) -> Extracao:
+        if self.cache is not None:
+            guardada = self.cache.obter(self.nome, relato)
+            if guardada is not None:
+                self.extracao = guardada
+                return guardada
         self.extracao = self.real.extrair(relato)
+        if self.cache is not None:
+            self.cache.guardar(self.nome, relato, self.extracao)
         return self.extracao
 
 
@@ -148,7 +204,8 @@ def processar(ficha, nome_extrator: str) -> tuple[int, dict, dict | None]:
     """Roda o fluxo real. Devolve (status HTTP, corpo, leitura crua do relato ou None)."""
     if nome_extrator not in NOMES_EXTRATORES:
         return 400, {"erros": [f"extrator desconhecido: {nome_extrator!r}"]}, None
-    gravador = ExtratorGravador(criar_extrator(nome_extrator))
+    gravador = ExtratorGravador(criar_extrator(nome_extrator),
+                                CACHE_DE_LEITURA if nome_extrator != NOME_PADRAO else None)
     try:
         saida = processar_ficha(ficha, gravador)
     except FichaInvalida as e:
@@ -234,7 +291,8 @@ class Manipulador(BaseHTTPRequestHandler):
         for chave, valor in {**CABECALHOS_SEGURANCA, **(extras or {})}.items():
             self.send_header(chave, valor)
         self.end_headers()
-        self.wfile.write(corpo)
+        if self.command != "HEAD":
+            self.wfile.write(corpo)
 
     def _redirecionar(self, destino: str, cookie: str | None = None) -> None:
         extras = {"Location": destino}
@@ -251,10 +309,14 @@ class Manipulador(BaseHTTPRequestHandler):
         return biscoito[COOKIE].value if COOKIE in biscoito else None
 
     def _quem(self) -> dict | None:
-        """Enfermeiro logado. Sem `usuarios` no servidor (só nos testes), o login fica desligado."""
+        """Enfermeiro logado. Sem `usuarios` no servidor (só nos testes), o login fica desligado.
+
+        A consulta automática da fila (a página manda `X-Salus-Automatico: 1`) não conta como uso:
+        se contasse, a sessão nunca expiraria com o computador abandonado."""
         if self.server.usuarios is None:
             return {"login": None, "nome": None}
-        return self.server.usuarios.sessao(self._codigo_sessao())
+        automatica = self.headers.get(CABECALHO_AUTOMATICO) == "1"
+        return self.server.usuarios.sessao(self._codigo_sessao(), renovar=not automatica)
 
     @property
     def _por(self) -> str | None:
@@ -299,7 +361,11 @@ class Manipulador(BaseHTTPRequestHandler):
         if caminho.startswith("/estatico/"):
             return self._arquivo(caminho.removeprefix("/estatico/"))
         if caminho == "/api/questionario":
-            return self._json(200, {**dados_para_interface(), "voz": self.server.transcritor is not None})
+            fonte = self.server.historico
+            return self._json(200, {**dados_para_interface(), "voz": self.server.transcritor is not None,
+                                    "historico": {"ligado": fonte is not None,
+                                                  "fonte": fonte.nome if fonte else None,
+                                                  "exemplos": fonte.exemplos() if fonte else []}})
         if caminho == "/api/exemplos":
             return self._json(200, listar_exemplos())
         if caminho == "/api/fila":
@@ -311,7 +377,7 @@ class Manipulador(BaseHTTPRequestHandler):
 
     def _arquivo(self, nome: str) -> None:
         arquivo = PASTA_ESTATICA / nome
-        if not NOME_ARQUIVO.match(nome) or arquivo.suffix not in TIPOS or not arquivo.is_file():
+        if not NOME_ARQUIVO.fullmatch(nome) or arquivo.suffix not in TIPOS or not arquivo.is_file():
             return self._erro(HTTPStatus.NOT_FOUND, "não encontrado")
         self._enviar(200, arquivo.read_bytes(), TIPOS[arquivo.suffix])
 
@@ -352,7 +418,7 @@ class Manipulador(BaseHTTPRequestHandler):
             corpo = json.loads(corpo_bruto.decode("utf-8-sig"))
             if not isinstance(corpo, dict):
                 raise TypeError
-        except (ValueError, TypeError):
+        except (ValueError, TypeError, RecursionError):  # RecursionError: JSON aninhado demais
             return self._erro(HTTPStatus.BAD_REQUEST, "JSON inválido; esperado um objeto")
         try:
             status, resposta = getattr(self, ROTAS_POST[caminho])(corpo)
@@ -360,6 +426,19 @@ class Manipulador(BaseHTTPRequestHandler):
             log.exception("erro interno em %s", caminho)
             return self._erro(HTTPStatus.INTERNAL_SERVER_ERROR, "erro interno; veja o terminal")
         self._json(status, resposta)
+
+    def _nao_permitido(self):
+        """PUT, DELETE, PATCH, OPTIONS e HEAD: nada aqui usa esses métodos."""
+        try:
+            tamanho = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            tamanho = 0
+        if 0 < tamanho <= LIMITE_DESCARTE:  # corpo não lido derruba a conexão no Windows
+            self.rfile.read(tamanho)
+        self.close_connection = True
+        self._erro(HTTPStatus.METHOD_NOT_ALLOWED, "método não permitido")
+
+    do_PUT = do_DELETE = do_PATCH = do_OPTIONS = do_HEAD = _nao_permitido
 
     def _login(self, corpo: bytes | None) -> None:
         if self.server.usuarios is None:
@@ -376,7 +455,6 @@ class Manipulador(BaseHTTPRequestHandler):
         self._redirecionar("/", f"{COOKIE}={sessao}; HttpOnly; SameSite=Strict; Path=/; Max-Age={SESSAO_MAX_S}")
 
     def _voz(self, audio: bytes | None, consulta: str) -> None:
-        from urllib.parse import parse_qs
         if not self.headers.get("Content-Type", "").split(";")[0].strip().startswith("audio/"):
             return self._erro(HTTPStatus.UNSUPPORTED_MEDIA_TYPE, "envie o áudio com Content-Type audio/*")
         if audio is None:
@@ -401,13 +479,27 @@ class Manipulador(BaseHTTPRequestHandler):
     @staticmethod
     def _numero(corpo: dict) -> int | None:
         n = corpo.get("numero")
-        return n if isinstance(n, int) and not isinstance(n, bool) else None
+        return n if numero_valido(n) else None
 
     def _triagem(self, corpo: dict) -> tuple[int, dict]:
         par = self._ficha_e_extrator(corpo)
         if par is None:
             return 400, {"erros": ['JSON inválido; esperado {"ficha": {...}}']}
-        return calcular(*par)
+        status, resposta = calcular(*par)
+        if status == 200 and "prontuario" in corpo:
+            # o cruzamento roda DEPOIS da classificação e não mexe nela: só acrescenta avisos
+            resposta["historico"] = consultar(self.server.historico, corpo["prontuario"], resposta["saida"])
+        return status, resposta
+
+    def _historico(self, corpo: dict) -> tuple[int, dict]:
+        if self.server.historico is None:
+            return 404, {"erros": ["histórico desligado"]}
+        if not prontuario_valido(corpo.get("prontuario")):
+            return 400, {"erros": ["prontuário inválido: use de 4 a 12 dígitos"]}
+        h = consultar(self.server.historico, corpo["prontuario"])
+        if h is None:
+            return 404, {"erros": ["prontuário não encontrado"]}
+        return 200, h
 
     def _fila_entrar(self, corpo: dict) -> tuple[int, dict]:
         par = self._ficha_e_extrator(corpo)
@@ -460,7 +552,8 @@ class Manipulador(BaseHTTPRequestHandler):
         return 404, {"erros": ["não há aviso pendente para este paciente"]}
 
 
-ROTAS_POST = {"/api/triagem": "_triagem", "/api/fila": "_fila_entrar", "/api/fila/qr": "_fila_qr",
+ROTAS_POST = {"/api/triagem": "_triagem", "/api/historico": "_historico",
+              "/api/fila": "_fila_entrar", "/api/fila/qr": "_fila_qr",
               "/api/fila/chamar": "_fila_chamar", "/api/fila/concluir": "_fila_concluir",
               "/api/fila/devolver": "_fila_devolver",
               "/api/fila/aviso-visto": "_fila_aviso_visto", "/api/fila/ficha": "_fila_ficha",
@@ -475,12 +568,15 @@ class ServidorLocal(ThreadingHTTPServer):
 
 def criar_servidor(porta: int = 0, fila: Fila | None = None, url_paciente: str | None = None,
                    transcritor: Transcritor | None = None, usuarios: Usuarios | None = None,
-                   treino: BaseTreino | None = None) -> ServidorLocal:
+                   treino: BaseTreino | None = None, historico: FonteHistorico | None = None,
+                   sem_historico: bool = False) -> ServidorLocal:
     """Cria o servidor em loopback (porta 0 = qualquer porta livre).
 
     `url_paciente` é o endereço da página do paciente no Wi-Fi (ex.: http://192.168.0.10:8766);
     sem ele, a fila funciona, mas não gera QR. Sem `transcritor`, a voz fica desligada.
-    Sem `usuarios`, o login fica DESLIGADO: isso só é usado nos testes; o comando sempre liga."""
+    Sem `usuarios`, o login fica DESLIGADO: isso só é usado nos testes; o comando sempre liga.
+    `historico` é a fonte do histórico do paciente (padrão: pacientes simulados); `sem_historico`
+    desliga a consulta."""
     servidor = ServidorLocal(("127.0.0.1", porta), Manipulador)
     p = servidor.server_address[1]
     servidor.hosts_permitidos = {f"127.0.0.1:{p}", f"localhost:{p}"}
@@ -489,6 +585,7 @@ def criar_servidor(porta: int = 0, fila: Fila | None = None, url_paciente: str |
     servidor.transcritor = transcritor
     servidor.usuarios = usuarios
     servidor.treino = treino
+    servidor.historico = None if sem_historico else (historico or HistoricoSimulado())
     return servidor
 
 
@@ -563,6 +660,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--treino", default="treino.db",
                         help="base de treino do extrator, anonimizada (padrão: treino.db)")
     parser.add_argument("--sem-treino", action="store_true", help="não grava casos na base de treino")
+    parser.add_argument("--sem-historico", action="store_true",
+                        help="desliga a consulta ao histórico do paciente (fonte simulada)")
     args = parser.parse_args(argv)
     configurar_io()
     carregar_env()
@@ -587,7 +686,8 @@ def main(argv: list[str] | None = None) -> int:
             transcritor = TranscritorWhisper()
         elif not args.sem_voz:
             log.info("voz desligada: faster-whisper não instalado (pip install -r requirements-voz.txt)")
-        servidor = criar_servidor(args.porta, fila, base, transcritor, usuarios, treino)
+        servidor = criar_servidor(args.porta, fila, base, transcritor, usuarios, treino,
+                                  sem_historico=args.sem_historico)
     except OSError as e:
         log.error("não foi possível abrir a porta: %s", e)
         if paciente:
