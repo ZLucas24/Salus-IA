@@ -16,7 +16,8 @@ import logging
 import os
 from urllib.parse import urlparse
 
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, ValidationError, model_validator
+from pydantic.json_schema import SkipJsonSchema
 
 from triagem.extracao import ESTADOS_EXTRAIVEIS, Extracao, Extrator
 from triagem.schema import Alergias, Duracao, Sinal
@@ -126,6 +127,30 @@ class _Resposta(BaseModel):
     duracao: Duracao | None = None
     sinais: list[_Item] = []
     alergias: dict | None = None
+    descartes: SkipJsonSchema[list[str]] = []  # campos inválidos descartados antes da validação
+
+    @model_validator(mode="before")
+    @classmethod
+    def _tolerar(cls, dados):
+        """Um campo ruim (lista nula, duração fora da faixa) é descartado sozinho, sem derrubar
+        a resposta inteira. Os sinais continuam sendo validados um a um em `_converter`."""
+        if not isinstance(dados, dict):
+            return dados
+        dados, descartes = dict(dados), []
+        for campo in ("queixas", "sinais"):
+            if dados.get(campo) is None:
+                dados[campo] = []
+        if dados.get("duracao") is not None:
+            try:
+                Duracao.model_validate(dados["duracao"])
+            except ValidationError:
+                descartes.append(f"duração {dados['duracao']!r} inválida; descartada")
+                dados["duracao"] = None
+        if dados.get("alergias") is not None and not isinstance(dados["alergias"], dict):
+            descartes.append("alergias fora do formato; descartadas")
+            dados["alergias"] = None
+        dados["descartes"] = descartes
+        return dados
 
 
 def _aviso_host(host: str | None) -> None:
@@ -180,7 +205,7 @@ class OllamaExtrator(Extrator):
 
     @staticmethod
     def _converter(relato: str, r: _Resposta) -> Extracao:
-        avisos: list[str] = []
+        avisos: list[str] = list(r.descartes)
         aceita_negado = tem_negacao(relato)
         base = sem_acentos(relato).lower()
         extraiveis = {n.value for n in NomeSinal} - {n.value for n in SINAIS_MEDIDOS}
@@ -223,7 +248,8 @@ class OllamaExtrator(Extrator):
                 avisos.append(f"queixa '{q}' descartada: fora das categorias")
 
         alergias = None
-        if r.alergias and (itens := normalizar_itens(r.alergias.get("itens") or [])):
+        brutos = r.alergias.get("itens") if r.alergias else None
+        if isinstance(brutos, list) and (itens := normalizar_itens(brutos)):
             alergias = Alergias(status=Status.PRESENTE, itens=itens)
         return Extracao(queixa_principal=(r.queixa_principal or "").strip().lower()[:80] or None,
                         queixas=sorted(set(queixas), key=lambda q: q.value), duracao=r.duracao,

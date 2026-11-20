@@ -10,6 +10,7 @@ from triagem.questionario import carregar_questionario
 from triagem.regras import carregar_regras
 from triagem.schema import Alerta, DadosAtendente, Sinal
 from triagem.sinais import NomeSinal, Origem, Status
+from triagem.texto import sem_acentos
 
 CAMPOS_PLAUSIVEIS = ("temperatura", "saturacao", "pressao_sistolica", "pressao_diastolica",
                      "frequencia_cardiaca", "frequencia_respiratoria", "glicemia", "glasgow")
@@ -138,8 +139,9 @@ def afericoes_faltando(dados: DadosAtendente, sinais: dict[NomeSinal, Sinal]) ->
 
     necessarias = list(regras["afericoes_essenciais"])
     consciencia = presente(NomeSinal.ALTERACAO_CONSCIENCIA)
-    diabetes = "diabetes" in (sinais.get(NomeSinal.DOENCA_CRONICA).itens
-                              if NomeSinal.DOENCA_CRONICA in sinais else [])
+    # "diabetes", "Diabetes mellitus", "diabético"...: o modelo local escreve de vários jeitos
+    diabetes = any("diabet" in sem_acentos(i).lower() for i in (sinais.get(NomeSinal.DOENCA_CRONICA).itens
+                                                                if NomeSinal.DOENCA_CRONICA in sinais else []))
     if consciencia or diabetes:
         necessarias.append("glicemia")
     if consciencia:

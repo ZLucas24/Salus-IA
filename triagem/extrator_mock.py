@@ -12,7 +12,7 @@ import re
 from triagem.extracao import Extracao, Extrator
 from triagem.schema import Alergias, Duracao, Sinal
 from triagem.sinais import NomeSinal, Origem, Queixa, Status
-from triagem.texto import negacao_antes, normalizar_itens, sem_acentos, tem_negacao
+from triagem.texto import negacao_antes, normalizar_itens, sem_acentos
 
 # sinal -> expressão (sobre texto minúsculo e sem acentos)
 PALAVRAS: dict[NomeSinal, str] = {
@@ -48,7 +48,9 @@ PALAVRAS: dict[NomeSinal, str] = {
 }
 _DOENCAS = {"diabet": "diabetes", "hipertens": "hipertensao", "pressao alta": "hipertensao",
             "asma": "pneumopatia", "cardiopat": "cardiopatia", "coracao": "cardiopatia",
-            "renal": "renopatia"}
+            "renal": "renopatia", "insuficiencia": "outra"}
+_CONECTORES = {"quando", "que", "se", "pois", "porque", "sempre", "fico", "fiquei", "me", "toda", "todo"}
+MAX_DURACAO = 1000  # o mesmo limite do formato da saída
 
 _QUEIXAS = {
     Queixa.DOR_TORACICA: (r"(dor|aperto|pontada|peso|desconforto|opressao)[^,.;]*\b(peito|torax|toracic)"
@@ -97,21 +99,29 @@ def _alergia(original: str, normal: str) -> list[str] | None:
         aceitos = []
         for item in normalizar_itens(resto):
             palavras = sem_acentos(item).lower().split()
+            # "penicilina quando tomo...": o nome vai até a palavra que começa outra ideia
+            corte = next((i for i, p in enumerate(palavras) if i > 0 and p in _CONECTORES), None)
+            if corte is not None:
+                item, palavras = " ".join(item.split()[:corte]), palavras[:corte]
             if len(palavras) > 2 or palavras[0] in _NAO_E_MEDICAMENTO:
                 break  # começou outra frase ("e tenho dor")
             aceitos.append(item)
+            if corte is not None:
+                break
         itens = (itens or []) + aceitos
     return itens
 
 
 def _duracao(normal: str) -> tuple[Duracao | None, list[str]]:
-    achadas = []
+    achadas, avisos = [], []
     for m in _DURACAO.finditer(normal):
         n = _NUMEROS.get(m.group(1)) or float(m.group(1))
+        if n > MAX_DURACAO:  # "há 2000 dias": descarta só a duração, não a leitura inteira
+            avisos.append(f"duração de {n:g} {_UNIDADES[m.group(2)]} acima do limite; descartada")
+            continue
         achadas.append(Duracao(valor=n, unidade=_UNIDADES[m.group(2)]))
     if "desde ontem" in normal:
         achadas.append(Duracao(valor=1, unidade="dias"))
-    avisos = []
     if len({(d.valor, d.unidade) for d in achadas}) > 1:
         avisos.append("o relato cita mais de uma duração; foi usada a primeira")
     return (achadas[0] if achadas else None), avisos
@@ -129,8 +139,8 @@ class MockExtrator(Extrator):
         queixas: set[Queixa] = set()
         primeira_queixa = None
 
+        doencas: set[str] = set()
         for trecho, oracao in _oracoes(original, normal):
-            nega = tem_negacao(oracao)
             if _ALERGIA.search(oracao):
                 continue  # a frase de alergia já foi tratada acima
             for nome, padrao in PALAVRAS.items():
@@ -140,19 +150,22 @@ class MockExtrator(Extrator):
                 # presente vence negado: basta uma ocorrência não negada
                 negado = all(negacao_antes(oracao, m.start()) for m in ocorrencias)
                 status = Status.NEGADO if negado else Status.PRESENTE
+                if nome == NomeSinal.DOENCA_CRONICA:  # só as doenças afirmadas nesta oração
+                    doencas |= {v for k, v in _DOENCAS.items()
+                                for m in re.finditer(re.escape(k), oracao) if not negacao_antes(oracao, m.start())}
                 atual = achados.get(nome)
                 if atual is not None and atual.status == Status.PRESENTE:
                     continue
-                itens = []
-                if nome == NomeSinal.DOENCA_CRONICA and status == Status.PRESENTE:
-                    itens = sorted({v for k, v in _DOENCAS.items() if k in normal})
-                achados[nome] = Sinal(nome=nome, status=status, itens=itens, trecho=trecho,
-                                      origem=Origem.EXTRAIDO_DO_RELATO)
-            if not nega:
-                queixas |= {q for q, p in _QUEIXAS.items() if re.search(p, oracao)}
+                achados[nome] = Sinal(nome=nome, status=status, trecho=trecho, origem=Origem.EXTRAIDO_DO_RELATO)
+            # a negação vale para o que vem logo depois dela: "tosse que não passa" continua tosse
+            queixas |= {q for q, p in _QUEIXAS.items()
+                        if any(not negacao_antes(oracao, m.start()) for m in re.finditer(p, oracao))}
             if primeira_queixa is None:
                 primeira_queixa = trecho
 
+        cronica = achados.get(NomeSinal.DOENCA_CRONICA)
+        if cronica is not None and cronica.status == Status.PRESENTE:
+            achados[NomeSinal.DOENCA_CRONICA] = cronica.model_copy(update={"itens": sorted(doencas)})
         duracao, avisos = _duracao(normal)
         if not queixas:
             queixas = {Queixa.OUTRA} if any(s.status == Status.PRESENTE for s in achados.values()) \

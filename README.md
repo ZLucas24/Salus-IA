@@ -64,7 +64,7 @@ Estas regras valem para todo o código (a lista completa está no [CLAUDE.md](CL
 
 ## Início rápido
 
-Requer **Python 3.11 ou superior** e o **Git**. Escolha o terminal que você usa no Windows; só a
+Requer **Python 3.12 ou superior** (o numpy e o scipy fixados no `requirements.txt` não instalam no 3.11) e o **Git**. Escolha o terminal que você usa no Windows; só a
 linha que ativa o ambiente virtual muda entre eles.
 
 **PowerShell**
@@ -144,7 +144,6 @@ Para trocar o modelo ou o endereço do Ollama, copie `.env.example` para `.env` 
 | `TRIAGEM_WHISPER` | modelo de voz do relato e reserva (faster-whisper): `base`, `small`, `medium` | `small` |
 | `TRIAGEM_WHISPER_RAPIDO` | modelo de voz das respostas curtas (sim/não, número, opção) | `base` |
 | `OLLAMA_HOST` | endereço do Ollama | `http://127.0.0.1:11434` |
-| `SUPABASE_URL`, `SUPABASE_KEY`, `HF_TOKEN` | reservados; **hoje não são usados** | vazio |
 
 O `.env` nunca vai para o repositório.
 
@@ -610,7 +609,9 @@ Na primeira vez que a interface sobe, os dois modelos de voz são baixados: `bas
 150 MB), usado nas respostas curtas, e `small` (cerca de 500 MB), usado no relato. Numa máquina
 de teste, a resposta curta caiu de cerca de 1,8 s para 0,7 s com o modelo rápido. Se o rápido não
 entender, o servidor tenta uma vez com o maior antes de responder. Se o modelo rápido não puder
-ser baixado (máquina sem internet), a voz continua funcionando só com o maior.
+ser baixado (máquina sem internet), a voz continua funcionando só com o maior. O download usa o
+pacote `huggingface_hub`, fixado no `requirements-voz.txt`; a Salus não usa o Hugging Face
+para mais nada.
 Depois disso, a voz funciona **sem internet**: o áudio é transcrito nesta máquina, na memória, e
 descartado. Nada é gravado em disco.
 
@@ -880,7 +881,6 @@ geração_banco_dados.py, salus_treinamento.db   banco de casos simulados para t
 - **Banco de casos** (`salus_treinamento.db`): as pontuações-alvo são sorteadas, então não servem
   para ajustar pesos; o `triagem.ajustar` mostra isso (correlação perto de zero). Três casos têm
   pressão sistólica menor que a diastólica.
-- **Supabase e Hugging Face** estão nas dependências, mas ainda não são usados.
 - **Histórico do paciente:** os dados são inventados e a fonte real (prontuário eletrônico de um
   hospital) ainda não existe. O cruzamento só reconhece as três categorias de queixa do protótipo
   e compara nomes de alergia por texto (não sabe que dipirona e Novalgina são o mesmo remédio).

@@ -45,8 +45,12 @@ _PADROES = [
     (re.compile(r"\b\d{6,}\b"), "[NUMERO]"),
     # endereço: a palavra-chave e só as palavras do nome da rua (maiúsculas ou "de/da/do"), mais o
     # número; não engole o resto da frase, que costuma ter sintomas
+    # endereço com número: o nome da rua pode estar em minúsculas ("rua das flores, 123")
     (re.compile(r"\b(?i:rua|r\.|avenida|av\.|travessa|tv\.|alameda|estrada|rodovia|pra[cç]a)\s+"
-                r"(?:(?:d[aeo]s?|[A-ZÀ-Ú0-9][\wÀ-ú.]*)\s*)+(?:,?\s*(?i:n[ºo°.]?)?\s*\d+)?"), "[ENDERECO]"),
+                r"(?:[\wÀ-ú]+\s+){0,3}[\wÀ-ú]+,?\s*(?i:n[ºo°.]?)?\s*\d+\b"), "[ENDERECO]"),
+    # sem número: só palavras com maiúscula; o ponto final encerra o endereço
+    (re.compile(r"\b(?i:rua|r\.|avenida|av\.|travessa|tv\.|alameda|estrada|rodovia|pra[cç]a)\s+"
+                r"(?:(?:d[aeo]s?|[A-ZÀ-Ú0-9][\wÀ-ú]*)(?:\s+|(?=[.,;:!?]|$)))+"), "[ENDERECO] "),
     (re.compile(r"\b(?i:dr|dra|sr|sra)\.?\s+[A-ZÀ-Ú][\wÀ-ú]+(?:\s+[A-ZÀ-Ú][\wÀ-ú]+)*"), "[NOME]"),
 ]
 _NOME = r"[\wÀ-ú]+(?:\s+(?:d[aeo]s?\s+)?[A-ZÀ-Ú][\wÀ-ú]+)*"
@@ -63,7 +67,7 @@ def anonimizar(texto: str) -> str:
     t = _APRESENTACAO.sub(lambda m: f"{m.group(1) or m.group(3)} [NOME]", texto)
     for padrao, marcador in _PADROES:
         t = padrao.sub(marcador, t)
-    return t
+    return re.sub(r"\[ENDERECO\]\s+(?=[.,;:!?]|$)", "[ENDERECO]", t)
 
 
 def nomes_suspeitos(texto: str) -> list[str]:
@@ -99,6 +103,17 @@ def _respostas_anonimas(respostas: dict) -> dict:
     return saida
 
 
+def _textos(respostas: dict) -> list[str]:
+    """Textos livres das respostas (já anonimizadas), para procurar nomes que escaparam."""
+    textos = []
+    for pid, valor in respostas.items():
+        if isinstance(valor, str) and pid in PERGUNTAS_TEXTO:
+            textos.append(valor)
+        elif isinstance(valor, dict):
+            textos += [v for k, v in valor.items() if k in PARTES_TEXTO_LIVRE and isinstance(v, str)]
+    return textos
+
+
 def montar_caso(caso_id: str, ficha: dict, saida: dict, extrator: str, relogio=time.time,
                 crua: dict | None = None) -> dict:
     """Transforma ficha + saída do motor num caso anônimo para a base de treino.
@@ -108,6 +123,7 @@ def montar_caso(caso_id: str, ficha: dict, saida: dict, extrator: str, relogio=t
     dados = dict(ficha.get("dados_atendente") or {})
     idade, sexo = dados.pop("idade", None), dados.pop("sexo_biologico", None)
     relato = anonimizar(saida.get("relato_original") or "")
+    respostas = _respostas_anonimas(ficha.get("respostas"))
     sinais = saida.get("sinais", [])
     return {
         "caso_id": caso_id,
@@ -118,7 +134,8 @@ def montar_caso(caso_id: str, ficha: dict, saida: dict, extrator: str, relogio=t
         "faixa_etaria": faixa_etaria(idade),
         "sexo_biologico": sexo,
         "relato": relato,
-        "revisar_nomes": nomes_suspeitos(relato),
+        # nomes que escaparam podem estar no relato ou em qualquer resposta em texto livre
+        "revisar_nomes": sorted(set(nomes_suspeitos(relato)) | set(nomes_suspeitos(" . ".join(_textos(respostas))))),
         # o que o extrator leu no relato
         "extracao": _extracao(crua) if crua is not None else {
             "queixa_principal": anonimizar(saida.get("queixa_principal") or "") or None,
@@ -129,7 +146,7 @@ def montar_caso(caso_id: str, ficha: dict, saida: dict, extrator: str, relogio=t
                        for s in sinais if s.get("origem") == "extraido_do_relato" or s.get("status_no_relato")],
         },
         # gabarito: o que o enfermeiro respondeu diretamente e as aferições
-        "respostas": _respostas_anonimas(ficha.get("respostas")),
+        "respostas": respostas,
         "afericoes": dados,
         "sinais_finais": [{"nome": s["nome"], "status": s["status"], "origem": s["origem"]} for s in sinais],
         "divergencias": [a["referencias"] for a in saida.get("alertas", []) if a.get("codigo") == "divergencia"],

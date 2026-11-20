@@ -105,11 +105,13 @@ const $ = (s) => document.querySelector(s);
 /* ---------------------------------------------------------------- widgets */
 // Cada widget: { el, get(), set(v) }. `mudou()` avisa a página que algo foi digitado.
 
-function numeroOuUndefined(texto, inteiro) {
-  if (texto === '' || texto == null) return undefined;
-  const n = Number(texto.replace(',', '.'));
-  if (Number.isNaN(n)) return undefined;
-  return inteiro ? Math.trunc(n) : n;
+// Campo vazio = não respondido. "37,5" vale como 37.5. Decimal num campo inteiro e texto que não
+// é número NÃO são corrigidos em silêncio: vão como estão e o servidor recusa com a mensagem certa.
+function numeroOuUndefined(texto) {
+  const t = String(texto ?? '').trim();
+  if (t === '') return undefined;
+  const n = Number(t.replace(',', '.'));
+  return Number.isFinite(n) ? n : t;
 }
 
 function wSimNao(mudou) {
@@ -124,9 +126,10 @@ function wSimNao(mudou) {
 }
 
 function wNumero(parte, mudou, inteiro) {
-  const input = h('input', { type: 'number', step: inteiro ? '1' : 'any', min: parte.minimo, max: parte.maximo, oninput: mudou });
+  // texto com teclado numérico: o campo "number" do navegador apaga "37,5" em alguns idiomas
+  const input = h('input', { type: 'text', class: 'numero', inputmode: inteiro ? 'numeric' : 'decimal', autocomplete: 'off', oninput: mudou });
   return {
-    el: input, get: () => numeroOuUndefined(input.value, inteiro),
+    el: input, get: () => numeroOuUndefined(input.value),
     set(v) { input.value = typeof v === 'number' ? String(v) : ''; },
   };
 }
@@ -164,11 +167,11 @@ function wTexto(parte, mudou) {
 }
 
 function wNumeroUnidade(parte, mudou) {
-  const num = h('input', { type: 'number', step: 'any', min: '0', oninput: mudou, 'aria-label': 'Valor' });
+  const num = h('input', { type: 'text', class: 'numero', inputmode: 'decimal', autocomplete: 'off', oninput: mudou, 'aria-label': 'Valor' });
   const sel = h('select', { onchange: mudou, 'aria-label': 'Unidade' }, parte.unidades.map((u) => h('option', { value: u, texto: u })));
   return {
     el: h('div', { class: 'duplo' }, num, sel),
-    get() { const v = numeroOuUndefined(num.value, false); return v === undefined ? undefined : { valor: v, unidade: sel.value }; },
+    get() { const v = numeroOuUndefined(num.value); return v === undefined ? undefined : { valor: v, unidade: sel.value }; },
     set(v) { num.value = v && typeof v === 'object' ? String(v.valor) : ''; sel.value = v && v.unidade ? v.unidade : parte.unidades[0]; },
   };
 }
@@ -190,9 +193,10 @@ function criarWidget(parte, mudou) {
 function criarPergunta(p, mudou) {
   const simples = p.partes.length === 1 && p.partes[0].nome === 'resposta';
   let marcador;
+  const pintarDepois = () => pintar(); // `pintar` é declarada mais abaixo
   const itens = p.partes.map((parte) => {
     let bruto; // valor que o widget não sabe mostrar (ex.: marcador numa parte); mantido até o usuário mexer
-    const w = criarWidget(parte, () => { bruto = undefined; mudou(); });
+    const w = criarWidget(parte, () => { bruto = undefined; pintarDepois(); mudou(); });
     const dep = parte.depende_de;
     const cont = h('div', { class: 'parte', 'data-parte': parte.nome },
       simples ? null : h('span', { class: 'rotulo', texto: (PARTES[parte.nome] ?? humanizar(parte.nome)) + (dep ? ` (só se "${PARTES[dep.parte] ?? dep.parte}" = ${dep.igual ? 'sim' : 'não'})` : '') }),
@@ -202,6 +206,7 @@ function criarPergunta(p, mudou) {
       get: () => (bruto !== undefined ? bruto : w.get()),
       set(v) {
         if (typeof v === 'string' && MARCADORES.includes(v) && parte.forma !== 'sim_nao') { bruto = v; w.set(undefined); } else { bruto = undefined; w.set(v); }
+        pintarDepois(); // resposta por voz ou toque também mostra/esconde as partes dependentes
       },
     };
   });
@@ -216,10 +221,20 @@ function criarPergunta(p, mudou) {
     h('header', {}, h('span', { class: 'id', texto: p.id }),
       h('div', {}, h('p', { class: 'texto', texto: p.texto }), h('p', { class: 'finalidade', texto: p.finalidade })), selo),
     nota, h('div', { class: 'partes' }, itens.map((i) => i.cont)), marcadores);
+  pintar();
 
   function pintar() {
     el.classList.toggle('com-marcador', marcador !== undefined);
     marcadores.querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.marcador === marcador)));
+    // "Para onde vai" só aparece se "vai para outra parte" = sim; ao esconder, o valor é apagado
+    for (const i of itens) {
+      const dep = i.parte.depende_de;
+      if (!dep) continue;
+      const pai = itens.find((x) => x.parte.nome === dep.parte);
+      const mostrar = pai && pai.get() === dep.igual;
+      if (!mostrar && i.get() !== undefined) i.set(undefined);
+      i.cont.hidden = !mostrar;
+    }
   }
   return {
     id: p.id, el, selo, nota, simples,
@@ -544,6 +559,7 @@ async function analisar() {
     campo.focus({ preventScroll: true });
     return;
   }
+  voz.geracao += 1; // a gravação em andamento é descartada, não transcrita
   pararGravacao();
   clearTimeout(estado.timer);
   const minha = ++estado.seqAnalise;
@@ -562,8 +578,7 @@ async function analisar() {
 
 function voltarParaFicha() {
   if (estado.enviando) return; // a ficha está indo para a fila: espera a resposta
-  estado.seqAnalise += 1; // uma análise em andamento deixa de valer
-  estado.analisando = false;
+  cancelarAnalise();
   irParaPasso('ficha');
 }
 
@@ -588,9 +603,17 @@ function irParaPergunta(id) {
   if (foco) foco.focus({ preventScroll: true });
 }
 
-function voltarParaFichaSemRolar() {
+// Uma análise em andamento (ex.: modelo local demorando) deixa de valer: a resposta dela, quando
+// chegar, é ignorada, e a ficha volta a ser lida por palavras-chave.
+function cancelarAnalise() {
+  const emAndamento = estado.analisando;
   estado.seqAnalise += 1;
   estado.analisando = false;
+  if (emAndamento) { estado.seq += 1; agendar(); }
+}
+
+function voltarParaFichaSemRolar() {
+  cancelarAnalise();
   irParaPasso('ficha', true);
 }
 
@@ -786,7 +809,7 @@ function renderAnalise() {
 
 // `geracao` muda a cada ficha nova: o que foi gravado para um paciente nunca aparece na ficha do próximo
 const voz = { pulados: new Set(), chave: null, gravador: null, pedacos: [], ocupado: false, resultado: null, limite: null, seguir: true, soltar: null, abrindo: false, geracao: 0 };
-const FASES = ['Segurança', 'Relato', 'Complementares'];
+const FASES = ['Segurança', 'Relato', 'Pendências']; // a 3ª etapa são as perguntas pendentes do motor
 
 function partesPendentes(id) {
   const c = estado.perguntas[id];
@@ -1006,7 +1029,7 @@ function renderVoz() {
   }
   if (estado.campos.idade.get() === undefined) {
     voz.passo = null;
-    caixa.replaceChildren(titulo, h('p', { class: 'dica', texto: 'Preencha a idade no cadastro abaixo para começar. Depois a entrevista segue por voz: segurança, relato e perguntas complementares.' }));
+    caixa.replaceChildren(titulo, h('p', { class: 'dica', texto: 'Preencha a idade no cadastro abaixo para começar. Depois a entrevista segue por voz: segurança, relato e perguntas pendentes.' }));
     return;
   }
   const passos = passosPendentes();
@@ -1223,7 +1246,7 @@ async function atualizarReclassificacao(botao, confirmar) {
 
 function mostrarTela(qual) {
   const fila = qual === 'fila';
-  if (fila) pararGravacao();
+  if (fila && voz.gravador && voz.gravador.state === 'recording') { voz.geracao += 1; pararGravacao(); }
   $('#tela-triagem').hidden = fila;
   $('#tela-fila').hidden = !fila;
   $('#aba-triagem').setAttribute('aria-pressed', String(!fila));
@@ -1245,6 +1268,7 @@ const avisosVistos = new Set(); // ids já anunciados com som
 function bipe() {
   try {
     const ctx = new AudioContext();
+    setTimeout(() => ctx.close().catch(() => {}), 1000); // o navegador limita quantos podem ficar abertos
     [0, 0.25].forEach((t) => {
       const o = ctx.createOscillator(), g = ctx.createGain();
       o.frequency.value = 880; g.gain.value = 0.15;
@@ -1333,7 +1357,9 @@ function listaRecemChamados(lista) {
 async function carregarFila(automatico = false) {
   let dados;
   try {
-    dados = await (await fetch('/api/fila', automatico ? { headers: { 'X-Salus-Automatico': '1' } } : undefined)).json();
+    const r = await fetch('/api/fila', automatico ? { headers: { 'X-Salus-Automatico': '1' } } : undefined);
+    dados = await r.json();
+    if (!r.ok || !Array.isArray(dados.pacientes)) throw new Error((dados.erros || [`erro ${r.status}`]).join('; '));
   } catch (e) {
     $('#lista-fila').replaceChildren(h('p', { class: 'dica', texto: `Não foi possível carregar a fila (${e.message}).` }));
     return;
@@ -1392,7 +1418,10 @@ async function iniciar() {
 
   $('#exemplo').addEventListener('change', (ev) => {
     if (ev.target.value === '') return;
-    preencher(estado.exemplos[Number(ev.target.value)].ficha);
+    const indice = ev.target.value;
+    novaFicha(); // zera histórico, voz e análise da ficha anterior
+    $('#exemplo').value = indice;
+    preencher(estado.exemplos[Number(indice)].ficha);
     calcular();
   });
   $('#limpar').addEventListener('click', () => { novaFicha(); window.scrollTo({ top: 0 }); });

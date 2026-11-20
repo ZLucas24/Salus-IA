@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 
 from triagem.entrevista import FichaInvalida, processar_ficha
-from triagem.extracao import NOME_PADRAO, NOMES_EXTRATORES, criar_extrator
+from triagem.extracao import NOME_PADRAO, NOMES_EXTRATORES, criar_extrator_ou_indisponivel
 
 TAMANHO_MAXIMO = 1_000_000  # bytes; uma ficha tem poucos KB
 SAIDA_OK, SAIDA_FICHA_INVALIDA, SAIDA_USO, SAIDA_INTERNO = 0, 1, 2, 3
@@ -96,7 +96,7 @@ def main(argv: list[str] | None = None) -> int:
             return SAIDA_USO
 
         try:
-            saida = processar_ficha(ficha, criar_extrator(args.extrator))
+            saida = processar_ficha(ficha, criar_extrator_ou_indisponivel(args.extrator))
         except FichaInvalida as e:
             log.error("ficha inválida (%d problema(s)):", len(e.erros))
             for erro in e.erros:

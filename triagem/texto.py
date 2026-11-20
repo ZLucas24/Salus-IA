@@ -62,6 +62,8 @@ def normalizar_itens(texto: str | list[str]) -> list[str]:
     partes = texto if isinstance(texto, list) else re.split(r",|;|\be\b", str(texto))
     vistos, itens = set(), []
     for parte in partes:
+        if not isinstance(parte, str):  # um modelo pode devolver número ou nulo na lista
+            continue
         item = parte.strip().strip(".").strip()
         chave = sem_acentos(item).lower()
         if not item or chave in _PRONOMES or chave in vistos:

@@ -226,7 +226,7 @@ Só a **idade é obrigatória**. Aferição que não foi feita fica **em branco*
 - `episodios`: número — só se `vomitando` for `true`
 - `sangue_vomito_ou_fezes`: `true` ou `false`
 
-**Exemplo:** `"A02": {"vomitando": true, "episodios": 1, "sangue_vomito_ou_fezes": true}`
+**Exemplo:** `"A02": {"vomitando": true, "episodios": 50.5, "sangue_vomito_ou_fezes": true}`
 
 #### A03
 
@@ -265,7 +265,7 @@ Só a **idade é obrigatória**. Aferição que não foi feita fica **em branco*
 - `maior_temperatura`: número — só se `febre` for `true`
 - `calafrios`: `true` ou `false`
 
-**Exemplo:** `"R01": {"febre": true, "maior_temperatura": 30, "calafrios": true}`
+**Exemplo:** `"R01": {"febre": true, "maior_temperatura": 37.5, "calafrios": true}`
 
 #### R02
 
