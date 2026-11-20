@@ -71,8 +71,9 @@ def _exemplo(parte: dict):
         return True
     if forma == "escala":
         return 5
-    if forma == "numero":
-        return parte.get("minimo", 1)
+    if forma == "numero":  # um valor do meio da faixa (o mínimo daria "30 °C" como exemplo de febre)
+        minimo, maximo = parte.get("minimo"), parte.get("maximo")
+        return (minimo + maximo) / 2 if minimo is not None and maximo is not None else 1
     if forma == "opcao":
         return parte["opcoes"][0]
     if forma == "multiplas":
@@ -113,7 +114,7 @@ def gerar() -> str:
     afericoes = "\n".join(f"| `{a['campo']}` ({a['id']}) | {a['nome']} ({a['unidade']}) |"
                           for a in q["afericoes"] if a["campo"] != "pressao")
     afericoes += "\n| `pressao_sistolica` e `pressao_diastolica` (E03) | pressão arterial (mmHg), as duas juntas |"
-    texto = CABECALHO.format(afericoes=afericoes.replace("`glasgow` (E07)", "`glasgow` (E07)"))
+    texto = CABECALHO.format(afericoes=afericoes)
 
     for ob in ("S", "N", "M", "C"):
         grupo = [p for p in q["perguntas"] if p["obrigatoriedade"] == ob]

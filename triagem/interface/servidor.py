@@ -52,7 +52,8 @@ from pathlib import Path
 
 from triagem.entrevista import FichaInvalida, processar_ficha
 from triagem.fila import Fila, numero_valido
-from triagem.extracao import NOME_PADRAO, NOMES_EXTRATORES, Extracao, Extrator, criar_extrator
+from triagem.extracao import (NOME_PADRAO, NOMES_EXTRATORES, Extracao, Extrator,
+                              criar_extrator_ou_indisponivel as criar_extrator)
 from triagem.questionario import carregar_questionario
 from triagem.regras import carregar_regras
 from triagem.schema import Classificacao

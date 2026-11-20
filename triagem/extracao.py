@@ -63,6 +63,28 @@ class Extrator(ABC):
         """Extrai queixa, duração, sinais e alergia citados no texto do relato."""
 
 
+class ExtratorIndisponivel(Extrator):
+    """Extrator que não pôde ser criado (pacote ausente, endereço inválido...). Toda leitura
+    falha, e o fluxo segue só com as respostas diretas e o alerta `extracao_falhou`."""
+
+    def __init__(self, nome: str, erro: Exception):
+        self.nome, self.erro = nome, erro
+
+    def extrair(self, relato: str) -> Extracao:
+        raise RuntimeError(f"o extrator '{self.nome}' não pôde ser iniciado: {self.erro}")
+
+
+def criar_extrator_ou_indisponivel(nome: str) -> Extrator:
+    """Como `criar_extrator`, mas uma falha ao iniciar vira `ExtratorIndisponivel` em vez de
+    derrubar a ficha. Nome desconhecido continua sendo erro."""
+    if nome not in EXTRATORES:
+        raise ValueError(f"extrator desconhecido: {nome} (opções: {', '.join(NOMES_EXTRATORES)})")
+    try:
+        return criar_extrator(nome)
+    except Exception as e:
+        return ExtratorIndisponivel(nome, e)
+
+
 def criar_extrator(nome: str) -> Extrator:
     if nome not in EXTRATORES:
         raise ValueError(f"extrator desconhecido: {nome} (opções: {', '.join(NOMES_EXTRATORES)})")

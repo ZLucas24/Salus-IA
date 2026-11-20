@@ -1,7 +1,7 @@
 # Salus IA — regras do projeto
 
 Protótipo de agente de triagem hospitalar com foco no SUS, feito para um hackathon.
-Python 3.11+. Pacote `triagem`, executado com `python -m triagem`.
+Python 3.12+. Pacote `triagem`, executado com `python -m triagem`.
 
 ## Regras
 
@@ -15,7 +15,8 @@ Python 3.11+. Pacote `triagem`, executado com `python -m triagem`.
 7. Chaves e endereços só em `.env`, nunca no código.
 8. Dados somente simulados; a partição de teste nunca entra em treino, em exemplo
    de prompt ou em ajuste de pesos.
-9. Supabase e Hugging Face são opcionais: o comando principal roda sem rede.
+9. O comando principal e a interface rodam sem rede e sem serviço de nuvem; o único serviço
+   externo possível é o Ollama, se `OLLAMA_HOST` apontar para fora da máquina.
 10. Só o status `negado` conta como "não". `nao_mencionado`, `nao_sabe`, `recusou` e
     `incerto` nunca viram ausência de sinal, e aferição não feita nunca vale como normal.
 11. Nada reduz a pontuação: pesos nunca são negativos e há teste com sequências

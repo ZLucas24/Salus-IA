@@ -117,7 +117,8 @@ def cruzar(historico: dict, saida: dict) -> list[dict]:
 
     Só informa: não altera `saida` e nunca devolve nada que reduza ou aumente a prioridade."""
     limites = carregar_regras()["historico"]
-    atendimentos = historico["atendimentos"]
+    # do mais recente para o mais antigo, seja qual for a ordem da fonte
+    atendimentos = sorted(historico["atendimentos"], key=lambda a: a["ha_dias"])
     padroes = []
 
     recentes = [a for a in atendimentos if a["ha_dias"] <= limites["janela_retorno_dias"]]

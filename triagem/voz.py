@@ -206,7 +206,9 @@ NUMEROS_APROXIMADOS = {"zeru": 0, "cero": 0, "hum": 1, "doiz": 2, "doi": 2, "tre
                        "dex": 10, "deiz": 10, "dess": 10}
 DEZENAS = {"vinte": 20, "trinta": 30, "quarenta": 40, "cinquenta": 50, "sessenta": 60,
            "setenta": 70, "oitenta": 80, "noventa": 90}
-TEMPO = {"minuto": "minutos", "minutos": "minutos", "min": "minutos", "hora": "horas",
+NAO_ENTENDEU = ["nao entendi", "nao entendeu", "nao ouvi", "nao escutei", "pode repetir", "repete",
+                "como assim", "o que"]
+TEMPO = {"minuto": "minutos", "minutos": "minutos", "min": "minutos", "h": "horas", "hs": "horas", "hora": "horas",
          "horas": "horas", "dia": "dias", "dias": "dias", "semana": "semanas",
          "semanas": "semanas", "mes": "meses", "meses": "meses", "ano": "anos", "anos": "anos"}
 
@@ -247,6 +249,8 @@ SINONIMOS = {
 
 def normalizar(texto: str) -> str:
     t = sem_acentos(texto).lower()
+    t = re.sub(r"(\d)([a-z])", r"\1 \2", t)  # "2h", "30min" -> "2 h", "30 min"
+    t = re.sub(r"\bsem duvidas?\b", "certeza", t)  # "sem dúvida" é afirmação, não dúvida
     t = re.sub(r"(\d)[.,](\d)", r"\1#\2", t)          # preserva a vírgula decimal
     t = re.sub(r"[^a-z0-9#]+", " ", t).replace("#", ".")
     return f" {t.strip()} "
@@ -322,6 +326,8 @@ def interpretar_fala(parte: dict, texto: str) -> Entendido:
         return Entendido(valor=texto, entendido=True)
 
     norm = normalizar(texto)
+    if _tem(norm, NAO_ENTENDEU):  # o paciente não entendeu a pergunta: não é resposta
+        return Entendido(motivo="parece que a pergunta não foi entendida; repita a pergunta")
     marcador = _marcador(norm)
     if marcador:
         return Entendido(valor=marcador, entendido=True)
@@ -390,6 +396,8 @@ def interpretar_fala(parte: dict, texto: str) -> Entendido:
             return Entendido(motivo="diga um número e uma unidade (ex.: 2 horas)")
         valor = nums[0] + (0.5 if meio else 0)
         unidade = unidades.pop()
+        if valor > 1000:
+            return Entendido(motivo=f"{valor:g} {unidade} está fora do intervalo aceito")
         if unidade not in parte["unidades"]:
             return Entendido(motivo=f"'{unidade}' não é aceito aqui")
         return Entendido(valor={"valor": int(valor) if valor == int(valor) else valor, "unidade": unidade},

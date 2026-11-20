@@ -120,7 +120,7 @@ button.passo:hover { background: var(--marca-clara); }
 select, input[type="text"], input[type="number"] {
   background: var(--papel); border: 1.5px solid var(--linha); border-radius: 12px; padding: 8px 12px; min-height: 40px; max-width: 100%;
 }
-input[type="number"] { width: 7.5rem; }
+input[type="number"], input[type="text"].numero { width: 7.5rem; }
 input[type="text"] { width: 100%; }
 .pilula { border: 0; background: var(--marca); color: #fff; font-weight: 800; border-radius: 999px; padding: 9px 20px; cursor: pointer; min-height: 40px; }
 .pilula:hover { background: var(--marca-escura); }

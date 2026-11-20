@@ -145,6 +145,15 @@ def _minutos(d: Duracao) -> float:
     return d.valor * MINUTOS[d.unidade.value]
 
 
+def _duracoes_divergem(a: float, b: float) -> bool:
+    """Diferença maior que o dobro. Zero e zero concordam; zero e algo maior divergem."""
+    if a == b:
+        return False
+    if min(a, b) == 0:
+        return True
+    return not 0.5 <= a / b <= 2
+
+
 def mesclar_sinais(diretos: dict[NomeSinal, Sinal], medidos: dict[NomeSinal, Sinal],
                    extraidos: dict[NomeSinal, Sinal]) -> tuple[list[Sinal], list[Alerta], set[NomeSinal]]:
     """Um sinal por nome. Resposta direta e aferição prevalecem sobre o relato.
@@ -161,8 +170,12 @@ def mesclar_sinais(diretos: dict[NomeSinal, Sinal], medidos: dict[NomeSinal, Sin
             if relato is not None and relato.status in (Status.PRESENTE, Status.NEGADO) \
                     and relato.status != direto.status:
                 divergentes.add(nome)
-                sinal = direto.model_copy(update={"status_no_relato": relato.status,
-                                                  "trecho": relato.trecho})
+                # o valor e os itens do relato vão junto: a pontuação conta o sinal citado no
+                # relato (ex.: nota 9 da dor), e sem isso a regra por valor deixaria de valer
+                sinal = direto.model_copy(update={
+                    "status_no_relato": relato.status, "trecho": relato.trecho,
+                    "valor": direto.valor if direto.valor is not None else relato.valor,
+                    "itens": direto.itens or relato.itens})
         elif relato is not None and (direto is None or direto.status in (Status.NAO_SABE, Status.RECUSOU)):
             sinal = relato  # sem resposta definitiva, vale o que o relato disse
         elif direto is not None:
@@ -195,7 +208,8 @@ def modulos_ativos(respostas: Respondidas, extracao: Extracao | None,
 
 
 def calcular_pendencias(dados: DadosAtendente, respostas: Respondidas, ativos: list[str],
-                        divergentes: set[NomeSinal], extracao_falhou: bool) -> list[str]:
+                        divergentes: set[NomeSinal], extracao_falhou: bool,
+                        revisar_ids: frozenset[str] = frozenset()) -> list[str]:
     """Ids em ordem de prioridade (segurança, núcleo, módulo). Complementares não entram."""
     ordem = {pid: i for i, pid in enumerate(perguntas_por_id())}
     pendentes = []
@@ -206,7 +220,7 @@ def calcular_pendencias(dados: DadosAtendente, respostas: Respondidas, ativos: l
             continue
         nomes = {NomeSinal(s["nome"]) for s in p.get("sinais", [])}
         revisar = pid in respostas.incompletas or bool(nomes & divergentes) \
-            or (pid == "Q01" and extracao_falhou)
+            or (pid == "Q01" and extracao_falhou) or pid in revisar_ids
         if pid not in respostas.respondidas or revisar:
             pendentes.append(pid)
     pendentes.sort(key=lambda pid: (PRIORIDADE[perguntas_por_id()[pid]["obrigatoriedade"]], ordem[pid]))
@@ -276,11 +290,13 @@ def processar_ficha(ficha: dict, extrator: Extrator) -> SaidaTriagem:
                 idx = sinais.index(por_nome[n])
                 sinais[idx] = Sinal(nome=n, status=Status.NAO_SE_APLICA, origem=Origem.NENHUMA)
 
+    revisar_ids: set[str] = set()  # perguntas sem sinal próprio que precisam ser revistas
     duracao = respostas.duracao
     if extracao and extracao.duracao:
         if duracao is None:
             duracao = extracao.duracao
-        elif not 0.5 <= _minutos(duracao) / max(_minutos(extracao.duracao), 1) <= 2:
+        elif _duracoes_divergem(_minutos(duracao), _minutos(extracao.duracao)):
+            revisar_ids.add("Q02")
             alertas.append(Alerta(
                 codigo="duracao_divergente",
                 mensagem=f"Duração divergente: Q02 diz {duracao.valor:g} {duracao.unidade.value}, o "
@@ -288,13 +304,16 @@ def processar_ficha(ficha: dict, extrator: Extrator) -> SaidaTriagem:
                 referencias=["Q02", "Q01"]))
     alergias = respostas.alergias or Alergias()
     if extracao and extracao.alergias:
-        if alergias.status == Status.NAO_MENCIONADO:
+        # "não sabe" ou "recusou" na Q10 não apagam uma alergia que o próprio relato afirma
+        if alergias.status in (Status.NAO_MENCIONADO, Status.NAO_SABE, Status.RECUSOU):
             alergias = extracao.alergias
         elif alergias.status == Status.NEGADO:
+            itens = ", ".join(extracao.alergias.itens)
+            revisar_ids.add("Q10")
             alertas.append(Alerta(
                 codigo="alergia_divergente",
-                mensagem="O relato cita alergia (" + ", ".join(extracao.alergias.itens) +
-                         ") mas a Q10 diz que não há. Confirme com o paciente.",
+                mensagem=(f"O relato cita alergia ({itens})" if itens else "O relato cita alergia") +
+                         " mas a Q10 diz que não há. Confirme com o paciente.",
                 referencias=["Q10", "Q01"]))
 
     ativos = modulos_ativos(respostas, extracao, sinais)
@@ -304,7 +323,8 @@ def processar_ficha(ficha: dict, extrator: Extrator) -> SaidaTriagem:
                               referencias=[]))
     alertas += _alertas_de_dados(respostas, dados, sinais)
     pendentes = calcular_pendencias(dados, respostas, ativos, divergentes,
-                                    extracao_falhou=bool(respostas.relato) and extracao is None)
+                                    extracao_falhou=bool(respostas.relato) and extracao is None,
+                                    revisar_ids=frozenset(revisar_ids))
     faltando = afericoes_faltando(dados, {s.nome: s for s in sinais})
     if faltando:
         alertas.append(Alerta(codigo="afericao_faltando",

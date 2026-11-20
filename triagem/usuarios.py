@@ -119,23 +119,27 @@ class Usuarios:
         """Devolve o código da sessão, ou None (login/senha errados, conta inativa ou bloqueada)."""
         login = _normalizar(login)
         agora = self._relogio()
-        falhas, desde = self._falhas.get(login, (0, 0.0))
-        if falhas >= TENTATIVAS and agora - desde < BLOQUEIO_S:
+        with self._trava:
+            falhas, desde = self._falhas.get(login, (0, 0.0))
+            bloqueado = falhas >= TENTATIVAS and agora - desde < BLOQUEIO_S
+            u = None if bloqueado else self._con.execute(
+                "SELECT * FROM usuarios WHERE login = ? AND ativo = 1", (login,)).fetchone()
+        if bloqueado:
             log.warning("login bloqueado por tentativas: %s", login)
             return None
-        with self._trava:
-            u = self._con.execute("SELECT * FROM usuarios WHERE login = ? AND ativo = 1", (login,)).fetchone()
         # calcula o hash mesmo sem usuário, para o tempo de resposta não revelar quais logins existem
         sal = u["sal"] if u else b"\0" * 16
         certo = hmac.compare_digest(_hash(senha or "", sal), u["hash"] if u else b"\0" * 32)
         if not (u and certo):
-            if len(self._falhas) >= MAX_FALHAS_GUARDADAS:  # não deixa a lista crescer sem limite
-                self._falhas = {k: v for k, v in self._falhas.items() if agora - v[1] < BLOQUEIO_S}
-            self._falhas[login] = (falhas + 1 if agora - desde < BLOQUEIO_S else 1, agora)
+            with self._trava:  # várias tentativas ao mesmo tempo não perdem a contagem
+                if len(self._falhas) >= MAX_FALHAS_GUARDADAS:  # não deixa a lista crescer sem limite
+                    self._falhas = {k: v for k, v in self._falhas.items() if agora - v[1] < BLOQUEIO_S}
+                falhas, desde = self._falhas.get(login, (0, 0.0))
+                self._falhas[login] = (falhas + 1 if agora - desde < BLOQUEIO_S else 1, agora)
             return None
-        self._falhas.pop(login, None)
         sessao = secrets.token_urlsafe(32)
         with self._trava:
+            self._falhas.pop(login, None)
             self._sessoes[sessao] = {"login": login, "nome": u["nome"], "inicio": agora, "uso": agora}
         return sessao
 

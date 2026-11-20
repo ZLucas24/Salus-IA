@@ -251,7 +251,8 @@ def interpretar(pergunta: dict, bruto) -> Interpretacao:
             raise ErroResposta(
                 f"'{nome}' só se aplica quando '{dep['parte']}' é {dep['igual']}; "
                 f"recebi {brutas[nome]!r} com '{dep['parte']}'={pai!r}")
-    r.desconhecidos = [n for n, v in valores.items() if isinstance(v, Status)]
+    # só "não sabe" e "recusou" são desconhecidos; "não se aplica" é resposta
+    r.desconhecidos = [n for n, v in valores.items() if isinstance(v, Status) and v.desconhecido]
 
     def status_da_parte(nome: str, spec: dict) -> Status | None:
         v = valores.get(nome)
@@ -293,7 +294,8 @@ def interpretar(pergunta: dict, bruto) -> Interpretacao:
 
     for campo in pergunta.get("campos", []):
         v = valores.get(campo["de"])
-        if campo["campo"] == "relato" and isinstance(v, str):
+        # Status também é str: um marcador ("não sabe") nunca vira texto do relato
+        if campo["campo"] == "relato" and isinstance(v, str) and not isinstance(v, Status):
             r.relato = v
         elif campo["campo"] == "duracao" and isinstance(v, Duracao):
             r.duracao = v
@@ -309,8 +311,10 @@ def _montar_alergias(campo: dict, valores: dict, partes: dict, r: Interpretacao)
     if not v:
         return Alergias(status=Status.NEGADO)
     itens_v = valores.get(campo.get("itens_de", ""))
-    itens = normalizar_itens(itens_v) if isinstance(itens_v, str) else []
     tipos = valores.get(campo.get("tipos_de", ""))
+    if isinstance(itens_v, Status):  # "não sabe" o nome: resposta válida, sem itens
+        return Alergias(status=Status.PRESENTE, itens=[], tipos=tipos if isinstance(tipos, list) else [])
+    itens = normalizar_itens(itens_v) if isinstance(itens_v, str) else []
     if not itens:
         r.incompleta.append(campo.get("itens_de", "texto"))
     return Alergias(status=Status.PRESENTE, itens=itens,

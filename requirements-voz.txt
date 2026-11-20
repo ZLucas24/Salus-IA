@@ -1,2 +1,5 @@
-# Entrevista por voz (opcional). Transcrição local; o modelo (~500 MB) é baixado uma vez.
+# Entrevista por voz (opcional). Transcrição local; os modelos são baixados uma vez.
 faster-whisper==1.2.1
+# usado pelo faster-whisper só para baixar os modelos de voz (Hugging Face); fixado para a
+# instalação ser sempre igual
+huggingface_hub==2.4.0
