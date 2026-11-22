@@ -1,7 +1,7 @@
 /* Página do paciente (celular). Sem JavaScript; a página se recarrega sozinha. */
 :root {
-  --fundo: #f4f7f6; --papel: #ffffff; --tinta: #12211e; --tinta-suave: #4b5d59; --linha: #d9e3e0;
-  --marca: #0b6b5f;
+  --fundo: #f8f0e5; --papel: #fffdf9; --tinta: #1c2836; --tinta-suave: #5a5647; --linha: #e4d9c7;
+  --marca: #243344; --oliva: #7b7455; --ferrugem: #7f4a36;
   --azul: #2563eb;      --azul-fundo: #e6eefc;
   --verde: #15803d;     --verde-fundo: #e2f4e8;
   --amarelo: #a16207;   --amarelo-fundo: #fdf3c8;
@@ -11,8 +11,8 @@
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --fundo: #0e1715; --papel: #16231f; --tinta: #e8f1ee; --tinta-suave: #a2b5b0; --linha: #2a3b36;
-    --marca: #3dbba9;
+    --fundo: #131a24; --papel: #1b2531; --tinta: #f4ecdf; --tinta-suave: #b7ae9c; --linha: #303b49;
+    --marca: #d9cea7; --oliva: #b9af86; --ferrugem: #d59175;
     --azul: #7aa5ff; --azul-fundo: #17274a;
     --verde: #62d58a; --verde-fundo: #12331f;
     --amarelo: #f1cd5a; --amarelo-fundo: #3a3110;
@@ -29,8 +29,11 @@ main { max-width: 520px; margin: 0 auto; padding: 20px 16px 32px; display: flex;
 h2 { margin: 0 0 6px; font-size: 1.15rem; }
 p { margin: 0; }
 header { text-align: center; }
-.marca { font-weight: 800; font-size: 1.1rem; color: var(--marca); }
-.marca span { color: var(--tinta); }
+.marca { font-weight: 800; font-size: 1.25rem; letter-spacing: -.02em; display: flex; gap: 8px; align-items: center; justify-content: center; }
+.n-sal { color: var(--marca); } .n-us { color: var(--oliva); } .n-ia { color: var(--ferrugem); }
+.marca-svg { width: 44px; height: 30px; }
+.marca-svg .cruz { fill: var(--marca); }
+.marca-svg .trilha { fill: none; stroke: var(--oliva); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
 .numero-rotulo { margin-top: 10px; color: var(--tinta-suave); font-weight: 600; }
 .numero { font-size: 4.2rem; font-weight: 800; line-height: 1; letter-spacing: .04em; }
 .cartao, .posicao, .chamado {

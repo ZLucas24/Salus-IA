@@ -323,3 +323,8 @@ def test_caso_guarda_a_leitura_crua_do_relato_mesmo_quando_concorda_com_a_respos
     assert "falta de ar" in caso["extracao"]["sinais"][0]["trecho"]
     final = next(x for x in caso["sinais_finais"] if x["nome"] == "dispneia")
     assert final["origem"] == "resposta_direta"
+
+
+def test_sem_login_so_a_tela_de_entrada_o_estilo_e_o_mascote_ficam_abertos():
+    from triagem.interface.servidor import LIVRES
+    assert LIVRES == {"/login", "/estatico/estilo.css", "/estatico/mascote.jpg"}

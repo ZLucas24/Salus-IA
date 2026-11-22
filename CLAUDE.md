@@ -56,7 +56,11 @@ Python 3.12+. Pacote `triagem`, executado com `python -m triagem`.
   nunca salvo; a fala vira resposta por código, dúvida vira `nao_sabe` (nunca "não") e nada entra
   na ficha sem o enfermeiro confirmar.
 - `triagem/usuarios.py`: login do enfermeiro (scrypt, sessão em cookie HttpOnly/SameSite=Strict).
-  Toda rota da tela do enfermeiro exige sessão, exceto /login e o CSS; ações na fila registram quem fez.
+  Toda rota da tela do enfermeiro exige sessão, exceto /login, o CSS e a imagem do mascote; ações na
+  fila registram quem fez.
+- Marca: o nome é salUS.ia (o repositório e o pacote continuam "Salus IA"/`triagem`). Arquivos em
+  `docs/marca/` (use `logo.svg`; a imagem original traz ".ai" por engano); a paleta (azul-marinho, oliva, ferrugem, creme) está nos tokens do CSS. As cores da
+  classificação de risco são clínicas, não são da marca, e não mudam com ela (há teste).
 - `triagem/treino.py`: base de treino SÓ do extrator (`treino.db`, fora do Git), com relato
   anonimizado e leitura crua do extrator. Nunca usar para ajustar regras ou pesos; a partição
   `teste` nunca entra em treino. Com pacientes reais é dado sensível e exige aprovação do CEP.

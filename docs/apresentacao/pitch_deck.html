@@ -10,8 +10,9 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap">
 <style>
 :root {
-  --fundo: #e1ebe5; --cartao: #cfdfd5; --tinta: #17352a; --tinta-suave: #2f4a40;
-  --marca: #2d6a4f; --linha: #b9cdc1;
+  /* paleta da marca salUS.ia: azul-marinho, oliva, ferrugem e creme (cores do logo) */
+  --fundo: #f8f0e5; --cartao: #efe5d2; --tinta: #243344; --tinta-suave: #4a5361;
+  --marca: #7f4a36; --oliva: #7b7455; --linha: #dccfb9;
 }
 @page { size: 1456px 816px; margin: 0; }
 * { box-sizing: border-box; }
@@ -26,7 +27,9 @@ h2 { font-size: 46px; line-height: 1.1; font-weight: 800; letter-spacing: -.025e
 h3 { font-size: 25px; line-height: 1.2; font-weight: 800; letter-spacing: -.01em; margin: 0; }
 p { margin: 0; }
 .logo { font-size: 30px; font-weight: 800; letter-spacing: -.02em; }
-.logo span { color: var(--marca); }
+.logo .us { color: var(--oliva); } .logo .ia { color: var(--marca); }
+.logo-img { width: 560px; margin-left: -18px; display: block; }
+.mascote { position: absolute; right: 91px; top: 64px; width: 330px; height: 330px; object-fit: cover; object-position: 50% 42%; border-radius: 50%; border: 8px solid var(--cartao); }
 .centro { flex: 1; display: flex; flex-direction: column; justify-content: center; }
 .grade { display: grid; gap: 28px; margin-top: auto; margin-bottom: auto; }
 .g2 { grid-template-columns: 1fr 1fr; gap: 46px; } .g3 { grid-template-columns: repeat(3, 1fr); gap: 36px; } .g4 { grid-template-columns: repeat(4, 1fr); }
@@ -61,7 +64,7 @@ p { margin: 0; }
 <body>
 
 <section class="slide">
-  <div style="display:flex" class="entre"><p class="logo">salUS<span>.ia</span></p><p class="selo">Pitch Deck 2026</p></div>
+  <div style="display:flex;align-items:flex-start" class="entre"><img class="logo-img" src="../marca/logo.svg" alt="salUS.ia: transformando tecnologia em saúde"><p class="selo">Pitch Deck 2026</p></div>
   <div class="centro">
     <p class="selo">Triagem hospitalar com inteligência artificial</p>
     <h1>Agilidade na urgência.<span>Decisão humana no centro.</span></h1>
@@ -127,7 +130,7 @@ p { margin: 0; }
     <div class="cartao topo"><h3>Login e rastreio</h3><p>Acesso por conta de enfermeiro e registro de quem fez cada ação na fila.</p></div>
     <div class="cartao topo"><h3>Base de treino</h3><p>Casos anonimizados para medir e melhorar a leitura do relato pela IA.</p></div>
   </div>
-  <p class="nota">473 testes automatizados. Dados simulados; regras ainda sem validação clínica, que é a Fase 1 do roteiro.</p>
+  <p class="nota">636 testes automatizados. Dados simulados; regras ainda sem validação clínica, que é a Fase 1 do roteiro.</p>
 </section>
 
 <section class="slide">
@@ -177,7 +180,8 @@ p { margin: 0; }
 </section>
 
 <section class="slide">
-  <p class="logo">salUS<span>.ia</span></p>
+  <p class="logo">sal<span class="us">US</span><span class="ia">.ia</span></p>
+  <img class="mascote" src="../marca/mascote.jpg" alt="Mascote da salUS.ia">
   <div class="centro">
     <p class="selo">Nosso propósito</p>
     <h1 style="font-size:60px;max-width:880px;line-height:1.1">A tecnologia não deve substituir o cuidado humano, mas oferecer condições para que ele aconteça melhor.</h1>
