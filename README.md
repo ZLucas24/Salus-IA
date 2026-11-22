@@ -1,4 +1,6 @@
-# Salus IA
+# salUS.ia
+
+<p align="center"><img src="docs/marca/logo.svg" alt="Logo da salUS.ia: transformando tecnologia em saúde" width="560"></p>
 
 Protótipo de **copiloto de triagem** para UPAs e prontos-socorros do SUS e da rede privada, feito para o hackathon
 AKCIT Camp 2026.
@@ -15,6 +17,26 @@ essa ficha e devolve um JSON padronizado com:
 > real deve ser colocado nele. Isto **não é um dispositivo médico** e não pode ser usado em
 > atendimento real. **Os limites, as regras de cor e os pesos ainda não foram revisados por
 > enfermeiro ou médico.** A decisão final é sempre do profissional de saúde.
+
+## Marca
+
+O nome da startup é **salUS.ia** ("Salus IA" continua sendo o nome do repositório e do pacote Python).
+Os arquivos ficam em [docs/marca/](docs/marca/): o [logo em vetor](docs/marca/logo.svg), o
+[mascote](docs/marca/mascote.jpg) e a [imagem original do logo](docs/marca/logo_original.jpg), que serviu de
+referência para as cores (nela o nome aparece como "salUS.ai"; o nome certo é salUS.ia). A interface usa
+as cores do logo:
+
+| Cor | Código | Onde aparece |
+|---|---|---|
+| Azul-marinho | `#243344` | texto, botões e a cruz do símbolo |
+| Oliva | `#7b7455` | "US" do nome e as trilhas do símbolo |
+| Ferrugem | `#7f4a36` | ".ia" do nome |
+| Creme | `#f8f0e5` | fundo das telas |
+
+As cores da classificação de risco (azul, verde, amarelo, laranja e vermelho) **não fazem parte
+da marca** e não mudaram: são as cores clínicas da triagem.
+
+<p align="center"><img src="docs/marca/mascote.jpg" alt="Mascote da salUS.ia: um robô sorridente de moletom" width="360"></p>
 
 ## Apresentação
 
@@ -885,9 +907,15 @@ geração_banco_dados.py, salus_treinamento.db   banco de casos simulados para t
   hospital) ainda não existe. O cruzamento só reconhece as três categorias de queixa do protótipo
   e compara nomes de alergia por texto (não sabe que dipirona e Novalgina são o mesmo remédio).
   Na reclassificação, o prontuário precisa ser digitado de novo, porque não é guardado.
-- **Voz:** a precisão do reconhecimento em português ainda não foi medida com gravações reais
-  da equipe (os testes automáticos usam um transcritor falso). Teste com o microfone que será
-  usado na unidade, em ambiente com barulho.
+- **Voz:** testada pela equipe em 21/11/2026 com microfone e fala reais em português, numa casa
+  com ruído de fundo moderado: as respostas foram entendidas e a gravação parou sozinha no tempo
+  esperado. Em cerca de 1 a cada 4 respostas curtas o modelo rápido não entendeu e o maior foi
+  usado (uns 2 segundos a mais). Foi um teste de uso, com uma pessoa e um microfone: a taxa de
+  acerto **não foi medida**, e falta repetir no ambiente de uma unidade (barulho de sala de espera,
+  outras vozes, outros sotaques). Os testes automáticos usam um transcritor falso.
+- **QR do paciente:** testado em 21/11/2026 com um celular no mesmo Wi-Fi: a página abriu, o aviso
+  de piora chegou à tela do enfermeiro (faixa e som) e a chamada apareceu no celular. Falta testar
+  na rede de uma unidade, que pode isolar os aparelhos entre si e bloquear o acesso.
 - **Login:** não há perfis (todo enfermeiro pode tudo) nem recuperação de senha pela tela; a
   troca é pelo comando `python -m triagem.usuarios senha`.
 - **Base de treino:** a anonimização do texto livre é por padrões e pode deixar passar nomes

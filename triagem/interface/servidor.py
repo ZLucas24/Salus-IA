@@ -70,7 +70,7 @@ PASTA_EXEMPLOS = Path(__file__).parents[2] / "exemplos"
 LIMITE_CORPO = 1_000_000
 LIMITE_AUDIO = 8_000_000   # cerca de 2 minutos de áudio comprimido do navegador
 TIPOS = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8",
-         ".css": "text/css; charset=utf-8"}
+         ".css": "text/css; charset=utf-8", ".jpg": "image/jpeg"}
 CABECALHOS_SEGURANCA = {
     "Cache-Control": "no-store",
     "X-Content-Type-Options": "nosniff",
@@ -82,7 +82,10 @@ CABECALHOS_SEGURANCA = {
                                 "form-action 'self'; frame-ancestors 'none'"),
 }
 COOKIE = "salus_sessao"
-LIVRES = {"/login", "/estatico/estilo.css"}   # o resto exige sessão
+# marca salUS.ia: símbolo em SVG (sem imagem externa) e nome nas três cores do logo
+MARCA_SVG = ('<svg class="marca-svg" viewBox="0 0 96 64" aria-hidden="true" focusable="false"><g class="trilha"><path d="M25 8H55M13 18H30l5-4H55M7 28H22l5 5H38M27 25H38M7 39H24l3 3H38M13 50H28l6-5H55M29 58H55"/><circle cx="22" cy="8" r="3"/><circle cx="10" cy="18" r="3"/><circle cx="4" cy="28" r="3"/><circle cx="24" cy="25" r="3"/><circle cx="4" cy="39" r="3"/><circle cx="10" cy="50" r="3"/><circle cx="26" cy="58" r="3"/></g><path class="cruz" d="M60 4h12a5 5 0 0 1 5 5v12h12a5 5 0 0 1 5 5v12a5 5 0 0 1-5 5H77v12a5 5 0 0 1-5 5H60a5 5 0 0 1-5-5V43H43a5 5 0 0 1-5-5V26a5 5 0 0 1 5-5h12V9a5 5 0 0 1 5-5z"/></svg>')
+MARCA_NOME = '<span class="n-sal">sal</span><span class="n-us">US</span><span class="n-ia">.ia</span>'
+LIVRES = {"/login", "/estatico/estilo.css", "/estatico/mascote.jpg"}   # o resto exige sessão
 NOME_ARQUIVO = re.compile(r"[a-z0-9_.-]+")
 LIMITE_DESCARTE = 64_000
 CABECALHO_AUTOMATICO = "X-Salus-Automatico"  # consulta feita pelo relógio da página, não pelo enfermeiro
@@ -598,14 +601,15 @@ def pagina_login(erro: bool) -> bytes:
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Entrar · SalUS.ia</title>
+<title>Entrar · salUS.ia</title>
 <link rel="stylesheet" href="/estatico/estilo.css">
 </head>
 <body>
 <main class="tela-login">
 <form class="cartao" method="post" action="/login">
-<div class="marca"><span class="logo" aria-hidden="true">+</span>
-<div><h1>Sal<span>US</span>.ia</h1><p>Tela do enfermeiro</p></div></div>
+<img class="mascote" src="/estatico/mascote.jpg" alt="Mascote da salUS.ia: um robô sorridente de moletom" width="400" height="400">
+<div class="marca">{MARCA_SVG}
+<div><h1 class="nome">{MARCA_NOME}</h1><p class="lema">transformando tecnologia em saúde · tela do enfermeiro</p></div></div>
 {aviso}
 <label class="campo">Login<input name="login" autocomplete="username" required autofocus></label>
 <label class="campo">Senha<input name="senha" type="password" autocomplete="current-password" required></label>

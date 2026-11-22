@@ -49,7 +49,7 @@ def test_escuta_so_em_loopback(srv):
 
 def test_pagina_e_arquivos_estaticos(srv):
     status, cab, corpo = chamar(srv, "GET", "/")
-    assert status == 200 and cab["Content-Type"].startswith("text/html") and b"SalUS.ia" in corpo
+    assert status == 200 and cab["Content-Type"].startswith("text/html") and "salUS.ia — Triagem".encode() in corpo
     for nome, tipo in [("app.js", "text/javascript"), ("estilo.css", "text/css")]:
         status, cab, _ = chamar(srv, "GET", f"/estatico/{nome}")
         assert status == 200 and cab["Content-Type"].startswith(tipo)
@@ -224,3 +224,26 @@ def test_preenchimento_usa_palavras_chave_e_so_a_analise_usa_o_leitor_escolhido(
     js = (PASTA_ESTATICA / "app.js").read_text(encoding="utf-8")
     assert "async function calcular(extrator = 'mock')" in js
     assert js.count("calcular($('#extrator').value)") == 1 and "calcular($('#extrator').value)" in _funcao(js, "analisar")
+
+
+# --- marca salUS.ia ----------------------------------------------------------------------------
+
+def test_marca_nova_nas_paginas(srv):
+    _, _, corpo = chamar(srv, "GET", "/")
+    html = corpo.decode("utf-8")
+    assert 'class="marca-svg"' in html and 'n-us">US</span>' in html and "SalUS.ia" not in html
+    assert b"salUS.ia" in servidor.pagina_login(False) and b"/estatico/mascote.jpg" in servidor.pagina_login(False)
+
+
+def test_mascote_e_servido_como_imagem(srv):
+    status, cab, corpo = chamar(srv, "GET", "/estatico/mascote.jpg")
+    assert status == 200 and cab["Content-Type"] == "image/jpeg" and corpo[:2] == b"\xff\xd8" and len(corpo) < 100_000
+
+
+def test_cores_da_marca_nao_tocam_nas_cores_clinicas():
+    css = (PASTA_ESTATICA / "estilo.css").read_text(encoding="utf-8")
+    for token in ("--marca: #243344", "--oliva: #7b7455", "--ferrugem: #7f4a36", "--fundo: #f8f0e5"):
+        assert token in css, token
+    # as cores da classificação de risco são clínicas e continuam as mesmas
+    for token in ("--azul: #2563eb", "--verde: #15803d", "--amarelo: #a16207", "--laranja: #c2410c", "--vermelho: #b91c1c"):
+        assert token in css, token

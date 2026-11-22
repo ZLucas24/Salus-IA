@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 280" role="img" aria-label="salUS.ia: transformando tecnologia em saúde">
+  <rect width="760" height="280" rx="18" fill="#f8f0e5"/>
+  <g transform="translate(28 62) scale(2.15)">
+    <g fill="none" stroke="#7b7455" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M25 8H55M13 18H30l5-4H55M7 28H22l5 5H38M27 25H38M7 39H24l3 3H38M13 50H28l6-5H55M29 58H55"/>
+      <circle cx="22" cy="8" r="3"/><circle cx="10" cy="18" r="3"/><circle cx="4" cy="28" r="3"/>
+      <circle cx="24" cy="25" r="3"/><circle cx="4" cy="39" r="3"/><circle cx="10" cy="50" r="3"/><circle cx="26" cy="58" r="3"/>
+    </g>
+    <path fill="#243344" d="M60 4h12a5 5 0 0 1 5 5v12h12a5 5 0 0 1 5 5v12a5 5 0 0 1-5 5H77v12a5 5 0 0 1-5 5H60a5 5 0 0 1-5-5V43H43a5 5 0 0 1-5-5V26a5 5 0 0 1 5-5h12V9a5 5 0 0 1 5-5z"/>
+  </g>
+  <text x="258" y="160" font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif" font-weight="800" font-size="112" letter-spacing="-3" textLength="462" lengthAdjust="spacingAndGlyphs"><tspan fill="#243344">sal</tspan><tspan fill="#7b7455">US</tspan><tspan fill="#7f4a36">.ia</tspan></text>
+  <path d="M258 192H468l8-9 9 26 10-42 10 32 8-7H720" fill="none" stroke="#7b7455" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="258" y="236" font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif" font-weight="500" font-size="25" fill="#243344" textLength="462" lengthAdjust="spacing">transformando tecnologia em saúde</text>
+</svg>

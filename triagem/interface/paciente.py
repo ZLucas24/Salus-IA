@@ -17,7 +17,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs
 
 from triagem.fila import AVISO_ESPERA, AVISO_OK, Fila
-from triagem.interface.servidor import PASTA_ESTATICA
+from triagem.interface.servidor import MARCA_NOME, MARCA_SVG, PASTA_ESTATICA
 
 log = logging.getLogger("triagem.interface")
 
@@ -57,13 +57,13 @@ def _pagina(titulo: str, corpo: str, recarregar: str | None) -> bytes:
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 {meta}
-<title>{escape(titulo)} · SalUS.ia</title>
+<title>{escape(titulo)} · salUS.ia</title>
 <link rel="stylesheet" href="/paciente.css">
 </head>
 <body>
 <main>
 {corpo}
-<p class="rodape">SalUS.ia · protótipo com dados simulados.</p>
+<p class="rodape">salUS.ia · protótipo com dados simulados.</p>
 </main>
 </body>
 </html>
@@ -113,7 +113,7 @@ def pagina_status(s: dict, token: str = "", mensagem: str | None = None) -> byte
         f'<span class="tempo">{_minutos(c["tempo_alvo_min"])}</span></li>'
         for c in s["ordem"])
     corpo = f"""
-<header><p class="marca">Sal<span>US</span>.ia</p><p class="numero-rotulo">Seu número</p>
+<header><p class="marca">{MARCA_SVG}<span>{MARCA_NOME}</span></p><p class="numero-rotulo">Seu número</p>
 <p class="numero">{numero}</p></header>
 <section class="cartao cor cor-{s['cor']}"><p class="rotulo">Sua classificação</p>
 <p class="nome-cor">{escape(s['nome_cor'])}</p>
@@ -177,6 +177,7 @@ class ManipuladorPaciente(BaseHTTPRequestHandler):
         if not (caminho.startswith("/p/") and caminho.endswith("/piora")):
             return self._nao_permitido()
         if not 0 < tamanho <= LIMITE_FORMULARIO:
+            self._descartar_corpo()  # senão o Windows às vezes derruba a conexão antes da resposta
             self.close_connection = True
             return self._enviar(413, pagina_invalida(), "text/html; charset=utf-8")
         corpo = self.rfile.read(tamanho)
