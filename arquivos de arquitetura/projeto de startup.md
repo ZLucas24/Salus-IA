@@ -2,7 +2,7 @@
 10 de out. de 2026 
 
 ## **Visão geral**
-SalUS.ai é uma startup em estágio inicial que cria um copiloto de IA para a triagem de risco em UPAs e pronto-socorros do SUS: ajuda o enfermeiro a classificar, ordena a fila entre pacientes da mesma cor e dá ao paciente um canal para avisar que piorou.
+salUS.ia é uma startup em estágio inicial que cria um copiloto de IA para a triagem de risco em UPAs e pronto-socorros do SUS: ajuda o enfermeiro a classificar, ordena a fila entre pacientes da mesma cor e dá ao paciente um canal para avisar que piorou.
 
 • Estágio: ideia estruturada e em validação, com protótipo em construção para o AKCIT Camp 2026 (hackathon Sudeste em 07/11/2026, em São Paulo).
 • Base: Rio Paranaíba (MG), três estudantes de Ciência de Dados e Inteligência Artificial.
@@ -119,7 +119,7 @@ Esta seção reúne as normas que mais afetam o projeto. Não substitui parecer 
 **6. Protocolo de Manchester**
 • Não copiar fluxogramas nem discriminadores. Usar regras próprias, validadas pelo revisor clínico, com a origem de cada peso documentada.
 
-# O plano detalhado de tarefas por pessoa está no documento "SalUS.ai — Plano de atividades até o hackathon (07/11)". Em resumo:
+# O plano detalhado de tarefas por pessoa está no documento "salUS.ia — Plano de atividades até o hackathon (07/11)". Em resumo:
 1. Semana de 05/10 (em andamento): inscrição enviada, repositório, primeiro agente rodando e entrevistas pedidas.
 2. Até 18/10: duas entrevistas feitas, agente com 1 queixa e segundo relatório quinzenal do programa.
 3. Até 25/10: motor de regras com testes, regras das 3 queixas enviadas a um revisor clínico e 30 casos simulados.

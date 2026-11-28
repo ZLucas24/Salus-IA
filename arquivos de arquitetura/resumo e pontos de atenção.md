@@ -1,10 +1,10 @@
-# SalUS.ai — Resumo do projeto e pontos de atenção
+# salUS.ia — Resumo do projeto e pontos de atenção
 
 Oct 7, 2026 · @Ryan
 
 ## Resumo do projeto
 
-SalUS.ai é um agente de IA que atua como copiloto do profissional de triagem em UPAs e prontos-socorros do SUS. A equipe o inscreveu no AKCIT Camp 2026 (região Sudeste); o hackathon presencial é em São Paulo, em 07/11/2026, e o prazo da inscrição é 31/10/2026.
+salUS.ia é um agente de IA que atua como copiloto do profissional de triagem em UPAs e prontos-socorros do SUS. A equipe o inscreveu no AKCIT Camp 2026 (região Sudeste); o hackathon presencial é em São Paulo, em 07/11/2026, e o prazo da inscrição é 31/10/2026.
 
 **Problema.** A classificação de risco, que define quem é atendido primeiro, recai sobre poucos enfermeiros sobrecarregados, com perguntas repetidas e registro manual. O paciente de baixa renda não tem alternativa à rede pública, fica sem previsão de atendimento e sem canal para avisar que piorou.
 
