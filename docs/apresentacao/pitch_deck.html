@@ -12,181 +12,259 @@
 :root {
   /* paleta da marca salUS.ia: azul-marinho, oliva, ferrugem e creme (cores do logo) */
   --fundo: #f8f0e5; --cartao: #efe5d2; --tinta: #243344; --tinta-suave: #4a5361;
-  --marca: #7f4a36; --oliva: #7b7455; --linha: #dccfb9;
+  --marinho: #243344; --oliva: #7b7455; --ferrugem: #7f4a36; --linha: #dccfb9; --branco: #fffdf9;
 }
 @page { size: 1456px 816px; margin: 0; }
 * { box-sizing: border-box; }
 html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 body { margin: 0; background: var(--fundo); color: var(--tinta); font: 500 20px/1.45 "Plus Jakarta Sans", "Segoe UI", system-ui, sans-serif; }
-.slide { width: 1456px; height: 816px; padding: 64px 91px; position: relative; overflow: hidden; break-after: page; display: flex; flex-direction: column; background: var(--fundo); }
+.slide { width: 1456px; height: 816px; padding: 64px 91px; position: relative; overflow: hidden; break-after: page;
+  display: flex; flex-direction: column; background: var(--fundo); }
 .slide:last-child { break-after: auto; }
-.selo { font-size: 17px; font-weight: 700; letter-spacing: .11em; text-transform: uppercase; color: var(--marca); margin: 0; }
-h1 { font-size: 76px; line-height: 1.04; font-weight: 800; letter-spacing: -.03em; margin: 14px 0 0; }
-h1 span { color: var(--marca); display: block; }
-h2 { font-size: 46px; line-height: 1.1; font-weight: 800; letter-spacing: -.025em; margin: 10px 0 0; }
-h3 { font-size: 25px; line-height: 1.2; font-weight: 800; letter-spacing: -.01em; margin: 0; }
+.slide.escuro { background: var(--marinho); color: var(--fundo); }
+.slide.escuro h1, .slide.escuro h2, .slide.escuro h3 { color: var(--fundo); }
+.slide.escuro p { color: #d9d2c4; }
+.slide.escuro .selo { color: #e0a185; }
 p { margin: 0; }
-.logo { font-size: 30px; font-weight: 800; letter-spacing: -.02em; }
-.logo .us { color: var(--oliva); } .logo .ia { color: var(--marca); }
-.logo-img { width: 560px; margin-left: -18px; display: block; }
-.mascote { position: absolute; right: 91px; top: 64px; width: 330px; height: 330px; object-fit: cover; object-position: 50% 42%; border-radius: 50%; border: 8px solid var(--cartao); }
+h1 { font-size: 72px; line-height: 1.04; font-weight: 800; letter-spacing: -.03em; margin: 14px 0 0; color: var(--marinho); }
+h1 em { font-style: normal; color: var(--ferrugem); display: block; }
+h2 { font-size: 46px; line-height: 1.1; font-weight: 800; letter-spacing: -.025em; margin: 10px 0 0; color: var(--marinho); max-width: 1000px; }
+h3 { font-size: 24px; line-height: 1.2; font-weight: 800; letter-spacing: -.01em; margin: 0; color: var(--marinho); }
+.selo { font-size: 16px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--ferrugem); }
+.sub { font-size: 25px; color: var(--tinta-suave); max-width: 780px; margin-top: 22px; }
+.logo-img { width: 330px; display: block; margin-left: -10px; }
+.logo { font-size: 30px; font-weight: 800; letter-spacing: -.02em; color: var(--marinho); }
+.logo .us { color: var(--oliva); } .logo .ia { color: var(--ferrugem); }
+.slide.escuro .logo { color: var(--fundo); } .slide.escuro .logo .us { color: #c1b78e; } .slide.escuro .logo .ia { color: #e0a185; }
+.topo-linha { display: flex; justify-content: space-between; align-items: center; }
 .centro { flex: 1; display: flex; flex-direction: column; justify-content: center; }
-.grade { display: grid; gap: 28px; margin-top: auto; margin-bottom: auto; }
-.g2 { grid-template-columns: 1fr 1fr; gap: 46px; } .g3 { grid-template-columns: repeat(3, 1fr); gap: 36px; } .g4 { grid-template-columns: repeat(4, 1fr); }
-.cartao { background: var(--cartao); border-radius: 10px; padding: 34px 30px 36px; display: flex; flex-direction: column; gap: 12px; color: var(--tinta-suave); }
-.cartao h3 { color: var(--tinta); }
-.topo { border-top: 5px solid var(--marca); }
-.lado { border-left: 8px solid var(--marca); padding-left: 46px; }
-.lado.escuro, .topo.escuro { border-color: var(--tinta); }
-.tag { font-size: 15px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--marca); margin-top: 8px; }
-.g4 .cartao { padding: 26px 26px 30px; font-size: 18px; }
-.g4 h3 { font-size: 23px; }
-.grande { font-size: 42px; font-weight: 800; color: var(--marca); letter-spacing: -.02em; line-height: 1; }
+.rodape { margin-top: auto; border-top: 2px solid var(--linha); padding-top: 20px; display: flex; justify-content: space-between;
+  font-size: 17px; font-weight: 700; color: var(--tinta-suave); }
+.slide.escuro .rodape { border-color: #3a4757; color: #b9b09e; }
+
+.mascote { position: absolute; border-radius: 50%; object-fit: cover; object-position: 50% 40%; border: 10px solid var(--cartao); }
+.mascote.capa { width: 470px; height: 470px; right: 80px; top: 170px; }
+.mascote.medio { width: 270px; height: 270px; right: 91px; top: 56px; }
+.mascote.fim { width: 400px; height: 400px; right: 100px; top: 190px; border-color: #3a4757; }
+.balao { position: absolute; background: var(--branco); color: var(--marinho); font-weight: 800; font-size: 21px; line-height: 1.3;
+  padding: 16px 22px; border-radius: 22px; box-shadow: 0 6px 22px rgba(36, 51, 68, .14); max-width: 330px; }
+.balao::after { content: ""; position: absolute; width: 22px; height: 22px; background: var(--branco); transform: rotate(45deg); }
+.slide.escuro .balao { color: var(--marinho); }
+.balao.capa { right: 470px; top: 150px; } .balao.capa::after { right: -8px; bottom: 26px; }
+.balao.fim { right: 430px; top: 120px; } .balao.fim::after { right: -8px; bottom: 24px; }
+.com-mascote { max-width: 760px; }
+
+.grade { display: grid; gap: 26px; margin-top: auto; margin-bottom: auto; }
+.g2 { grid-template-columns: 1fr 1fr; } .g3 { grid-template-columns: repeat(3, 1fr); } .g4 { grid-template-columns: repeat(4, 1fr); }
+.cartao { background: var(--cartao); border-radius: 14px; padding: 30px 28px 32px; display: flex; flex-direction: column; gap: 10px; color: var(--tinta-suave); font-size: 19px; }
+.cartao.branco { background: var(--branco); }
+.cartao.topo { border-top: 6px solid var(--ferrugem); }
+.cartao.topo.oliva { border-top-color: var(--oliva); }
+.cartao.topo.marinho { border-top-color: var(--marinho); }
+.num { width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; background: var(--marinho); color: var(--fundo); font-weight: 800; font-size: 21px; }
+.tag { font-size: 14px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--ferrugem); }
 .lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
-.lista li { padding: 16px 0; border-bottom: 1px solid var(--linha); color: var(--tinta-suave); font-size: 18px; }
+.lista li { padding: 15px 0 15px 44px; border-bottom: 1px solid var(--linha); color: var(--tinta-suave); font-size: 19px; position: relative; }
 .lista li:last-child { border-bottom: 0; }
-.lista h3 { font-size: 23px; margin-bottom: 4px; color: var(--tinta); }
-.destaque { border: 2px solid var(--marca); background: var(--cartao); border-radius: 10px; padding: 44px 40px; }
-.destaque p.frase { font-size: 31px; font-weight: 800; line-height: 1.25; letter-spacing: -.015em; margin-top: 12px; }
-.pontos { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; }
-.pontos li::before { content: "• "; }
-.rodape { border-top: 2px solid var(--linha); padding-top: 22px; display: flex; gap: 46px; align-items: baseline; font-size: 17px; font-weight: 700; }
-.rodape .suave { color: var(--marca); font-weight: 600; }
-.entre { justify-content: space-between; }
-.mini h3 { font-size: 22px; } .mini p { font-size: 16.5px; color: var(--tinta-suave); }
-.mini { border-left: 4px solid var(--marca); padding-left: 18px; }
-.pronto { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px 30px; margin-top: auto; margin-bottom: auto; }
-.pronto .cartao { padding: 22px 24px 24px; font-size: 17px; gap: 6px; }
-.pronto h3 { font-size: 21px; }
-.nota { font-size: 16px; color: var(--tinta-suave); }
+.lista li::before { content: "✓"; position: absolute; left: 0; top: 16px; width: 28px; height: 28px; border-radius: 50%; background: var(--marinho);
+  color: var(--fundo); display: grid; place-items: center; font-size: 15px; font-weight: 800; }
+.lista strong { color: var(--marinho); }
+.frase { font-size: 34px; font-weight: 800; line-height: 1.22; letter-spacing: -.015em; color: var(--marinho); }
+.destaque { border: 3px solid var(--ferrugem); border-radius: 16px; padding: 36px 38px; background: var(--branco); }
+.grande { font-size: 50px; font-weight: 800; letter-spacing: -.03em; line-height: 1; color: var(--ferrugem); }
+.nota { font-size: 15.5px; color: var(--tinta-suave); margin-top: 16px; }
+.fluxo { display: grid; grid-template-columns: 1fr 60px 1fr 60px 1fr; align-items: stretch; margin-top: auto; margin-bottom: auto; }
+.seta { display: grid; place-items: center; font-size: 40px; color: var(--oliva); font-weight: 800; }
+.fases { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; margin-top: 26px; }
+.fase { background: var(--cartao); border-radius: 12px; padding: 18px 18px 20px; font-size: 16px; color: var(--tinta-suave); }
+.fase h3 { font-size: 19px; margin: 6px 0 4px; }
+.fase.feita { background: var(--marinho); } .fase.feita h3, .fase.feita p { color: var(--fundo); } .fase.feita .tag { color: #e0a185; }
+.qr-bloco { display: flex; align-items: center; gap: 30px; background: var(--branco); border-radius: 16px; padding: 22px 30px; margin-top: auto; }
+.qr { width: 170px; height: 170px; border-radius: 8px; flex: none; }
+.qr-url { font-size: 34px; font-weight: 800; letter-spacing: -.02em; color: var(--marinho); margin-top: 4px; }
+.qr-texto { font-size: 19px; color: var(--tinta-suave); margin-top: 6px; max-width: 760px; }
+.equipe { display: flex; gap: 18px; margin-top: 28px; flex-wrap: wrap; }
+.membro { display: flex; align-items: center; gap: 12px; font-size: 18px; color: #d9d2c4; }
+.inicial { width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; background: #c1b78e; color: var(--marinho); font-weight: 800; }
+.membro strong { display: block; color: var(--fundo); }
 </style>
 </head>
 <body>
 
+<!-- 1. capa -->
 <section class="slide">
-  <div style="display:flex;align-items:flex-start" class="entre"><img class="logo-img" src="../marca/logo.svg" alt="salUS.ia: transformando tecnologia em saúde"><p class="selo">Pitch Deck 2026</p></div>
-  <div class="centro">
-    <p class="selo">Triagem hospitalar com inteligência artificial</p>
-    <h1>Agilidade na urgência.<span>Decisão humana no centro.</span></h1>
-    <p style="font-size:26px;max-width:800px;margin-top:26px;color:var(--tinta-suave)">Copiloto inteligente para classificação de risco e gestão da fila, no SUS e na rede privada.</p>
+  <div class="topo-linha"><img class="logo-img" src="../marca/logo.svg" alt="salUS.ia: transformando tecnologia em saúde"><p class="selo">Pitch Deck 2026</p></div>
+  <div class="centro com-mascote">
+    <p class="selo">Copiloto de triagem para urgência e emergência</p>
+    <h1>Triagem segura,<em>com o olhar humano no centro.</em></h1>
+    <p class="sub">Um guia que ajuda o profissional a não errar: o que perguntar, em que ordem, e o que observar. A decisão é sempre dele.</p>
   </div>
-  <div class="rodape"><span>AKCIT Camp 2026</span><span class="suave">São Paulo • SP</span></div>
+  <img class="mascote capa" src="../marca/mascote.jpg" alt="Mascote da salUS.ia: um robô sorridente de moletom">
+  <p class="balao capa">Eu ajudo a lembrar. Quem cuida é você.</p>
+  <div class="rodape"><span>AKCIT Camp 2026</span><span>Universidade Federal de Viçosa · Campus Rio Paranaíba</span></div>
 </section>
 
+<!-- 2. problema -->
 <section class="slide">
-  <p class="selo">O gargalo</p>
-  <h2>Onde o atendimento da urgência trava</h2>
-  <div class="grade g2">
-    <div class="cartao lado escuro"><h3>Para o Paciente</h3>
-      <p>Horas de espera sem previsão, sem canal direto para notificar piora e sem visibilidade sobre sua real prioridade na fila.</p>
-      <p class="tag">Insegurança e ansiedade</p></div>
-    <div class="cartao lado"><h3>Para a Enfermagem</h3>
-      <p>Sobrecarga com entrevistas repetitivas e digitação manual em vez de focar na avaliação de casos clínicos complexos.</p>
-      <p class="tag">Gargalo operacional</p></div>
+  <p class="selo">O problema</p>
+  <h2>A triagem acontece sob pressão, e é ali que o erro aparece</h2>
+  <div class="grade g3">
+    <div class="cartao topo"><h3>Perguntas esquecidas</h3><p>Com a sala cheia, uma pergunta de segurança fica para trás: alergia, anticoagulante, desmaio. Um "não sei" vira "não".</p></div>
+    <div class="cartao topo oliva"><h3>Paciente sem voz na espera</h3><p>Quem piora na sala de espera não tem como avisar, e não sabe por que outra pessoa foi chamada antes.</p></div>
+    <div class="cartao topo marinho"><h3>Processo sem registro</h3><p>Sem saber quem classificou, quando e por quê, a unidade não consegue auditar, ensinar nem achar os gargalos.</p></div>
   </div>
 </section>
 
+<!-- 3. solução: guia para triagem segura -->
 <section class="slide">
   <p class="selo">A solução</p>
-  <h2>Triagem auxiliada por IA de ponta a ponta</h2>
-  <div class="grade g4">
-    <div class="cartao topo"><h3>1. Entrevista por Voz</h3><p>O enfermeiro dita as respostas; o agente lê o relato livre em português e sugere a próxima pergunta.</p></div>
-    <div class="cartao topo"><h3>2. Fila Dinâmica</h3><p>Pontuação de 0 a 100 que ordena a prioridade dentro da mesma cor. Reclassificar não muda o número.</p></div>
-    <div class="cartao topo"><h3>3. Transparência</h3><p>Paciente recebe QR code com sua cor, o motivo e uma faixa de posição na fila.</p></div>
-    <div class="cartao topo"><h3>4. Alerta de Piora</h3><p>Pelo QR, o paciente avisa que piorou e a equipe é alertada na hora.</p></div>
+  <h2>Um guia para a triagem segura, passo a passo</h2>
+  <div class="fluxo">
+    <div class="cartao branco"><span class="num">1</span><h3>Guia da entrevista</h3><p>Mostra a próxima pergunta, na ordem de prioridade. As perguntas de segurança vêm primeiro e nunca são puladas.</p></div>
+    <div class="seta">→</div>
+    <div class="cartao branco"><span class="num">2</span><h3>Análise da triagem</h3><p>Sugere a cor com o motivo de cada regra, destaca sinais de alerta na hora e aponta o que ainda falta perguntar.</p></div>
+    <div class="seta">→</div>
+    <div class="cartao branco"><span class="num">3</span><h3>Fila acompanhada</h3><p>O paciente segue a fila pelo QR e avisa se piorar. A equipe é alertada na hora e reavalia.</p></div>
   </div>
+  <p class="nota">32 perguntas, 7 aferições e 17 regras de cor explícitas. A entrevista pode ser feita por voz, digitando ou tocando nas respostas.</p>
 </section>
 
-<section class="slide">
-  <p class="selo">Segurança por arquitetura</p>
-  <h2>A IA apoia. A decisão é do profissional.</h2>
-  <div class="grade g2" style="align-items:center;grid-template-columns:1.25fr 1fr">
-    <ul class="lista">
-      <li><h3>Decisão Sempre Humana</h3>O enfermeiro valida e dá a palavra final. A IA atua estritamente como copiloto.</li>
-      <li><h3>Motor de Regras Auditável</h3>A cor vem de regras explícitas, que mostram o motivo de cada resultado, e não do modelo de linguagem.</li>
-      <li><h3>Proteção Anti-Regressão</h3>A IA nunca reduz uma pontuação. Só o profissional baixa uma prioridade, com confirmação.</li>
-      <li><h3>Privacidade e Rastreio</h3>Voz transcrita na própria máquina, login do enfermeiro e registro de quem fez cada ação.</li>
-    </ul>
-    <div class="destaque"><p class="selo">Princípio fundamental</p><p class="frase">A tecnologia não substitui a sensibilidade e a responsabilidade clínica.</p></div>
-  </div>
-</section>
-
-<section class="slide">
-  <div class="centro"><div class="lado" style="padding-left:38px">
-    <p class="selo">Protótipo funcional</p>
-    <h1 style="font-size:64px;margin-top:10px">Demonstração do Sistema</h1>
-    <p style="font-size:25px;max-width:900px;margin-top:18px;color:var(--tinta-suave)">Triagem por voz, cálculo de pontuação, fila com QR do paciente, aviso de piora e reclassificação.</p>
-  </div></div>
-</section>
-
-<section class="slide">
-  <p class="selo">Estágio atual</p>
-  <h2>O que já funciona no protótipo</h2>
-  <div class="pronto">
-    <div class="cartao topo"><h3>Entrevista por voz</h3><p>Transcrição local, sem internet, com confirmação do enfermeiro a cada resposta.</p></div>
-    <div class="cartao topo"><h3>Motor de regras</h3><p>17 regras de cor e pesos explícitos; cada resultado mostra a regra que o gerou.</p></div>
-    <div class="cartao topo"><h3>Fila com QR</h3><p>Paciente acompanha cor, motivo e faixa de espera pelo celular, no Wi-Fi da unidade.</p></div>
-    <div class="cartao topo"><h3>Aviso de piora</h3><p>Um toque no celular alerta a equipe; o enfermeiro reclassifica sem gerar novo número.</p></div>
-    <div class="cartao topo"><h3>Login e rastreio</h3><p>Acesso por conta de enfermeiro e registro de quem fez cada ação na fila.</p></div>
-    <div class="cartao topo"><h3>Base de treino</h3><p>Casos anonimizados para medir e melhorar a leitura do relato pela IA.</p></div>
-  </div>
-  <p class="nota">636 testes automatizados. Dados simulados; regras ainda sem validação clínica, que é a Fase 1 do roteiro.</p>
-</section>
-
-<section class="slide">
-  <p class="selo">Mercado &amp; clientes</p>
-  <h2>Modelo de Atuação B2B</h2>
-  <div class="grade g2">
-    <div class="cartao topo escuro"><h3>Clientes Contratantes</h3><ul class="pontos">
-      <li>Organizações Sociais de Saúde (OSS)</li><li>Hospitais Filantrópicos e Privados</li>
-      <li>Secretarias Municipais e Estaduais de Saúde</li><li>Redes de Urgência e UPAs</li></ul></div>
-    <div class="cartao topo"><h3>Usuários Finais</h3><ul class="pontos">
-      <li>Enfermeiros de Triagem</li><li>Técnicos de Enfermagem</li>
-      <li>Médicos Plantonistas</li><li>Pacientes na Sala de Espera</li></ul></div>
-  </div>
-</section>
-
-<section class="slide">
-  <p class="selo">Proposta de valor</p>
-  <h2>Retorno para a Instituição de Saúde</h2>
-  <div class="grade g3">
-    <div class="cartao"><p class="grande">Eficiência</p><h3 style="font-size:21px">Tempo Reduzido</h3><p style="font-size:18px">Menos tempo em tarefas operacionais e mais agilidade no primeiro contato.</p></div>
-    <div class="cartao"><p class="grande">Qualidade</p><h3 style="font-size:21px">Cuidado Humano</h3><p style="font-size:18px">Profissionais dedicam atenção aos casos graves e prioritários.</p></div>
-    <div class="cartao"><p class="grande">Gestão</p><h3 style="font-size:21px">Recursos Otimizados</h3><p style="font-size:18px">Fila organizada e dados claros sobre o fluxo de atendimento da unidade.</p></div>
-  </div>
-</section>
-
-<section class="slide">
-  <p class="selo">Modelo de negócio</p>
-  <h2>Software as a Service (SaaS)</h2>
-  <div class="grade g2" style="align-items:center;grid-template-columns:1.7fr 1fr">
-    <div class="cartao lado" style="padding-top:54px;padding-bottom:58px"><h3 style="font-size:32px">Assinatura por Unidade</h3>
-      <p style="font-size:22px">Cobrança mensal por hospital ou UPA contratante, com suporte contínuo, manutenção e atualizações incluídas.</p></div>
-    <div style="display:flex;flex-direction:column;gap:26px">
-      <div class="mini"><h3>Sem Custo de Dev Interno</h3><p>A instituição utiliza tecnologia de ponta sem criar infraestrutura do zero.</p></div>
-      <div class="mini"><h3>Evolução Contínua</h3><p>Algoritmos e regras constantemente aprimorados e auditados.</p></div>
+<!-- 4. humano no centro -->
+<section class="slide escuro">
+  <p class="selo">Humano no centro</p>
+  <h2 class="com-mascote">O olhar humanizado sempre. A decisão final é do profissional.</h2>
+  <img class="mascote medio" src="../marca/mascote.jpg" alt="Mascote da salUS.ia" style="border-color:#3a4757">
+  <div class="grade g2" style="margin-top:auto;margin-bottom:0;align-items:end">
+    <div>
+      <ul class="lista">
+        <li style="color:#d9d2c4;border-color:#3a4757"><strong style="color:#fffdf9">A IA não decide gravidade.</strong> Ela só lê o relato; a cor vem de regras que o profissional pode ler e questionar.</li>
+        <li style="color:#d9d2c4;border-color:#3a4757"><strong style="color:#fffdf9">Nada entra sem confirmação.</strong> Cada resposta falada aparece na tela e o enfermeiro confirma ou corrige.</li>
+        <li style="color:#d9d2c4;border-color:#3a4757"><strong style="color:#fffdf9">Só o humano baixa uma prioridade,</strong> e com confirmação explícita.</li>
+      </ul>
+    </div>
+    <div class="destaque" style="background:#2d3c4e;border-color:#e0a185">
+      <p class="tag" style="color:#e0a185">Acolhimento</p>
+      <p class="frase" style="color:#fffdf9;margin-top:10px">Com a voz, o enfermeiro olha para o paciente, e não para o teclado.</p>
     </div>
   </div>
 </section>
 
+<!-- 5. segurança do paciente -->
 <section class="slide">
-  <p class="selo">Roteiro de validação</p>
-  <h2>Próximos Passos</h2>
-  <div class="grade g3">
-    <div class="cartao topo escuro"><p class="tag" style="margin:0">Fase 1</p><h3>Entrevistas Clínicas</h3><p style="font-size:18px">Validação das regras com enfermeiros e médicos da UPA da universidade.</p></div>
-    <div class="cartao topo"><p class="tag" style="margin:0">Fase 2</p><h3>Piloto em 1 Unidade</h3><p style="font-size:18px">Teste prático em ambiente controlado após aprovações éticas/regulatórias.</p></div>
-    <div class="cartao topo"><p class="tag" style="margin:0">Fase 3</p><h3>Integração PEP</h3><p style="font-size:18px">Conectividade com prontuários eletrônicos sob total conformidade LGPD.</p></div>
+  <p class="selo">Segurança do paciente</p>
+  <h2>Como o copiloto ajuda a não errar</h2>
+  <div class="grade g2" style="grid-template-columns:1.25fr 1fr;align-items:center">
+    <ul class="lista">
+      <li><strong>Perguntas de segurança nunca são puladas.</strong> Alergia, anticoagulante, desmaio e falta de ar vêm antes de tudo.</li>
+      <li><strong>Dúvida não vira "não".</strong> "Não sei" e "recusou" ficam registrados como dúvida, e uma aferição não feita nunca vale como normal.</li>
+      <li><strong>Sinal de alerta na hora,</strong> ainda durante a entrevista, quando uma regra de cor grave é acionada.</li>
+      <li><strong>Prioridade nunca reduzida pela máquina.</strong> Há teste automático que garante isso.</li>
+      <li><strong>Piora na espera é ouvida:</strong> um toque no celular do paciente alerta a equipe com som.</li>
+    </ul>
+    <div class="destaque"><p class="tag">Princípio</p><p class="frase" style="margin-top:10px">Na dúvida, o sistema escolhe o caminho mais cuidadoso.</p></div>
   </div>
 </section>
 
+<!-- 6. otimização do tempo -->
 <section class="slide">
-  <p class="logo">sal<span class="us">US</span><span class="ia">.ia</span></p>
-  <img class="mascote" src="../marca/mascote.jpg" alt="Mascote da salUS.ia">
-  <div class="centro">
-    <p class="selo">Nosso propósito</p>
-    <h1 style="font-size:60px;max-width:880px;line-height:1.1">A tecnologia não deve substituir o cuidado humano, mas oferecer condições para que ele aconteça melhor.</h1>
+  <p class="selo">Otimização do tempo</p>
+  <h2>Mais tempo para o paciente, menos tempo com a burocracia</h2>
+  <div class="grade g4">
+    <div class="cartao"><p class="grande">&lt; 1 s</p><h3>Resposta por voz</h3><p>O enfermeiro fala, a resposta curta é transcrita no próprio computador e aparece para confirmar.</p></div>
+    <div class="cartao"><p class="grande">1 clique</p><h3>Chamar e atender</h3><p>Chamar o paciente já registra o atendimento e atualiza o celular dele.</p></div>
+    <div class="cartao"><p class="grande">Guia</p><h3>Sem depender de memória</h3><p>A próxima pergunta é sempre sugerida, e o que falta perguntar fica marcado na tela.</p></div>
+    <div class="cartao"><p class="grande">Auto</p><h3>Fila ordenada</h3><p>Por gravidade, não por chegada, e reordenada sozinha a cada nova triagem.</p></div>
   </div>
-  <div class="rodape entre"><span style="font-weight:600">Obrigado!</span><span class="suave" style="font-weight:700">startup.salus.ia@gmail.com</span></div>
+  <p class="nota">Tempo de transcrição medido em computador comum. O ganho de tempo na triagem real será medido no piloto.</p>
+</section>
+
+<!-- 7. processos do hospital -->
+<section class="slide">
+  <p class="selo">Processos do hospital</p>
+  <h2>Uma triagem padronizada ajuda a unidade inteira a evoluir</h2>
+  <div class="grade g3">
+    <div class="cartao topo"><h3>Mesmo padrão em todo plantão</h3><p>Toda a equipe segue o mesmo roteiro e as mesmas regras, do enfermeiro experiente ao recém-chegado.</p></div>
+    <div class="cartao topo oliva"><h3>Gargalos visíveis</h3><p>Tempo de espera por cor, horários de pico e tempo até reavaliar um paciente que piorou, em números agregados para o gestor.</p></div>
+    <div class="cartao topo marinho"><h3>Aprendizado contínuo</h3><p>Casos anonimizados mostram onde a leitura do relato erra, e as regras são revisadas pelos clínicos.</p></div>
+  </div>
+</section>
+
+<!-- 8. diferencial -->
+<section class="slide">
+  <p class="selo">Nosso diferencial</p>
+  <h2>Rastreabilidade dos processos e controle de dados que escala</h2>
+  <div class="grade g2">
+    <div class="cartao branco topo">
+      <h3 style="font-size:30px">Rastreabilidade</h3>
+      <ul class="lista">
+        <li>Cada cor mostra <strong>a regra que a gerou</strong>.</li>
+        <li>Cada ação registra <strong>quem fez e quando</strong>: triagem, chamada, reclassificação, aviso visto.</li>
+        <li>Reclassificações ficam no <strong>histórico</strong>, com a cor de antes e de depois.</li>
+      </ul>
+    </div>
+    <div class="cartao branco topo oliva">
+      <h3 style="font-size:30px">Controle de dados que escala</h3>
+      <ul class="lista">
+        <li><strong>Roda na própria unidade,</strong> sem nuvem: cada nova unidade traz sua máquina e seus dados.</li>
+        <li><strong>As mesmas regras</strong> em todas as unidades, versionadas e auditáveis.</li>
+        <li><strong>Dados mínimos:</strong> a ficha é apagada depois do atendimento, e a gestão vê só números agregados.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- 9. estágio e roadmap -->
+<section class="slide">
+  <p class="selo">Onde estamos</p>
+  <h2>Protótipo funcionando; agora, validação com quem cuida</h2>
+  <div class="grade g3" style="margin-bottom:0">
+    <div class="cartao"><h3>Pronto e testado</h3><p>Entrevista por voz, regras de cor, fila com QR, aviso de piora, reclassificação, login, histórico simulado e site com política de ética.</p></div>
+    <div class="cartao"><h3>651 testes automáticos</h3><p>Incluindo o que garante que a prioridade nunca cai sozinha e uma bateria contra entradas malformadas.</p></div>
+    <div class="cartao"><h3>Uso real fora da unidade</h3><p>Voz com microfone e QR no celular testados pela equipe. Ainda com dados simulados.</p></div>
+  </div>
+  <div class="fases">
+    <div class="fase feita"><p class="tag">Feito</p><h3>Protótipo</h3><p>Copiloto completo com dados simulados.</p></div>
+    <div class="fase"><p class="tag">Fase 1</p><h3>Validação clínica</h3><p>Regras revisadas por enfermeiros e médicos.</p></div>
+    <div class="fase"><p class="tag">Fase 2</p><h3>Aprovações</h3><p>Comitê de ética, Anvisa e LGPD.</p></div>
+    <div class="fase"><p class="tag">Fase 3</p><h3>Piloto</h3><p>Uma UPA, com indicadores medidos.</p></div>
+    <div class="fase"><p class="tag">Futuro</p><h3>Gestor e histórico</h3><p>Painel de gargalos e IA para recorrências.</p></div>
+  </div>
+</section>
+
+<!-- 10. modelo de negócio -->
+<section class="slide">
+  <p class="selo">Modelo de negócio</p>
+  <h2>Assinatura por unidade, venda B2B</h2>
+  <div class="grade g3" style="margin-top:40px;margin-bottom:0">
+    <div class="cartao topo"><h3>Quem contrata</h3><p>OSS, hospitais filantrópicos e privados, redes de urgência e secretarias de saúde.</p></div>
+    <div class="cartao topo oliva"><h3>Quem usa</h3><p>Enfermeiros e técnicos da triagem, médicos plantonistas e o paciente na sala de espera, pelo QR.</p></div>
+    <div class="cartao topo marinho"><h3>Como cobramos</h3><p>Assinatura mensal por unidade, com implantação e treinamento da equipe. Nunca vendemos dados.</p></div>
+  </div>
+  <div class="qr-bloco">
+    <img class="qr" src="../marca/qr_site.svg" alt="QR code para o site da salUS.ia: salus-ia.pages.dev">
+    <div>
+      <p class="tag">Conheça mais</p>
+      <p class="qr-url">salus-ia.pages.dev</p>
+      <p class="qr-texto">Quem somos, como funciona, roadmap e nossa política de ética e tratamento de dados.</p>
+    </div>
+  </div>
+</section>
+
+<!-- 11. fechamento -->
+<section class="slide escuro">
+  <p class="logo">sal<span class="us">US</span><span class="ia">.ia</span></p>
+  <div class="centro com-mascote">
+    <p class="selo">Nosso propósito</p>
+    <h1 style="font-size:56px;line-height:1.12;color:#fffdf9">A tecnologia não substitui o cuidado humano. Ela cria condições para que ele aconteça melhor.</h1>
+    <div class="equipe">
+      <div class="membro"><span class="inicial">LP</span><span><strong>Larissa Previde</strong>Ciência de Dados e IA</span></div>
+      <div class="membro"><span class="inicial">AB</span><span><strong>Anna Cassia Alves Bueno</strong>Ciência de Dados e IA</span></div>
+      <div class="membro"><span class="inicial">JL</span><span><strong>José Lucas Silva de Oliveira</strong>Ciência de Dados e IA</span></div>
+    </div>
+  </div>
+  <img class="mascote fim" src="../marca/mascote.jpg" alt="Mascote da salUS.ia">
+  <p class="balao fim">Obrigado! Sempre juntos nessa.</p>
+  <div class="rodape"><span>salus-ia.pages.dev</span><span>startup.salus.ia@gmail.com</span></div>
 </section>
 
 </body>
