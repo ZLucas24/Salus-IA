@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Política de ética e tratamento de dados — salUS.ia</title>
+<meta name="description" content="Como a salUS.ia usa a inteligência artificial na triagem e como trata os dados de pacientes e profissionais de saúde.">
+<link rel="icon" href="marca/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="site.css">
+</head>
+<body>
+<a class="pular" href="#conteudo">Ir para o conteúdo</a>
+
+<header class="topo">
+  <div class="largura">
+    <a class="marca" href="index.html" aria-label="salUS.ia, página inicial">
+      <svg viewBox="0 0 96 64" aria-hidden="true" focusable="false"><g class="trilha"><path d="M25 8H55M13 18H30l5-4H55M7 28H22l5 5H38M27 25H38M7 39H24l3 3H38M13 50H28l6-5H55M29 58H55"/><circle cx="22" cy="8" r="3"/><circle cx="10" cy="18" r="3"/><circle cx="4" cy="28" r="3"/><circle cx="24" cy="25" r="3"/><circle cx="4" cy="39" r="3"/><circle cx="10" cy="50" r="3"/><circle cx="26" cy="58" r="3"/></g><path class="cruz" d="M60 4h12a5 5 0 0 1 5 5v12h12a5 5 0 0 1 5 5v12a5 5 0 0 1-5 5H77v12a5 5 0 0 1-5 5H60a5 5 0 0 1-5-5V43H43a5 5 0 0 1-5-5V26a5 5 0 0 1 5-5h12V9a5 5 0 0 1 5-5z"/></svg>
+      <span><span class="n-sal">sal</span><span class="n-us">US</span><span class="n-ia">.ia</span></span>
+    </a>
+    <nav aria-label="Seções">
+      <ul>
+        <li><a href="index.html#quem-somos">Quem somos</a></li>
+        <li><a href="index.html#o-que-fazemos">O que fazemos</a></li>
+        <li><a href="index.html#roadmap">Roadmap</a></li>
+        <li><a href="politica.html" aria-current="page">Ética e dados</a></li>
+      </ul>
+    </nav>
+  </div>
+</header>
+
+<main id="conteudo" class="documento">
+  <p class="selo">Política</p>
+  <h1>Ética e tratamento de dados</h1>
+  <p class="meta">Versão 0.2 · 27 de novembro de 2026 · rascunho para revisão jurídica</p>
+
+  <p class="aviso"><strong>Situação atual.</strong> A salUS.ia é um protótipo. Hoje ela funciona só com dados simulados e não é usada no atendimento de pacientes reais. Esta política descreve como o sistema já trata os dados e os compromissos que valerão quando houver uso real. Antes disso, o texto será revisado por advogado e pelos clínicos parceiros.</p>
+
+  <nav class="sumario" aria-label="Sumário">
+    <strong>Sumário</strong>
+    <ol>
+      <li><a href="#principios">Princípios éticos</a></li>
+      <li><a href="#ia">Como usamos a inteligência artificial</a></li>
+      <li><a href="#papeis">Quem é responsável pelos dados</a></li>
+      <li><a href="#dados">Quais dados tratamos, onde ficam e por quanto tempo</a></li>
+      <li><a href="#finalidade">Para que usamos os dados</a></li>
+      <li><a href="#base-legal">Bases legais</a></li>
+      <li><a href="#seguranca">Segurança</a></li>
+      <li><a href="#compartilhamento">Compartilhamento</a></li>
+      <li><a href="#direitos">Direitos dos titulares</a></li>
+      <li><a href="#pesquisa">Pesquisa e melhoria do sistema</a></li>
+      <li><a href="#limites">Limitações que reconhecemos</a></li>
+      <li><a href="#site">Este site</a></li>
+      <li><a href="#contato">Contato e atualizações</a></li>
+    </ol>
+  </nav>
+
+  <h2 id="principios">1. Princípios éticos</h2>
+  <ol>
+    <li><strong>Decisão humana.</strong> A classificação de risco é um ato do profissional de saúde. O sistema sugere; o enfermeiro decide e pode corrigir qualquer sugestão.</li>
+    <li><strong>Não maleficência.</strong> Quando há dúvida, o sistema escolhe o caminho mais cauteloso: uma resposta "não sei" nunca vira "não", uma aferição não feita nunca vale como normal, e nada que o sistema faça sozinho reduz a prioridade de um paciente.</li>
+    <li><strong>Transparência e explicabilidade.</strong> Cada cor sugerida mostra as regras que a geraram. As regras, os limites e os pesos estão publicados no repositório do projeto.</li>
+    <li><strong>Equidade.</strong> A prioridade considera apenas sinais clínicos, aferições e as respostas da entrevista. Ela não usa raça, renda, endereço, escolaridade, plano de saúde nem qualquer outro dado social. A idade e o sexo biológico servem só para escolher as perguntas e os limites clínicos que se aplicam.</li>
+    <li><strong>Minimização.</strong> Coletamos o mínimo necessário para a triagem e guardamos pelo menor tempo possível.</li>
+    <li><strong>Responsabilidade.</strong> Cada ação na fila registra quem a fez. Erros encontrados são corrigidos e documentados.</li>
+    <li><strong>Honestidade.</strong> Dizemos com clareza o que ainda não foi validado e o que o sistema não faz.</li>
+  </ol>
+
+  <h2 id="ia">2. Como usamos a inteligência artificial</h2>
+  <p>A salUS.ia usa IA em dois pontos, sempre com conferência humana:</p>
+  <ul>
+    <li><strong>Leitura do relato.</strong> Um modelo de linguagem lê o que o paciente contou e extrai sinais, como "dor no peito" ou "falta de ar". Ele não avalia gravidade, não dá diagnóstico e não dá conselhos. O código descarta qualquer sinal que o modelo não consiga comprovar com um trecho do próprio relato, e qualquer negação que o paciente não fez. O modelo roda no computador da unidade.</li>
+    <li><strong>Transcrição da voz.</strong> Quando o enfermeiro usa a voz, a fala é convertida em texto no próprio computador. O áudio fica só na memória durante a transcrição e nunca é gravado. Cada resposta entendida aparece na tela e só entra na ficha depois que o enfermeiro confirma.</li>
+  </ul>
+  <p><strong>A cor e a pontuação não vêm da IA.</strong> Elas são calculadas por regras explícitas, escritas em código, que qualquer pessoa pode ler. Há testes automáticos que garantem que nenhum dado novo reduz a prioridade calculada.</p>
+  <p>O <strong>histórico do paciente</strong>, quando consultado, gera apenas avisos para a equipe (por exemplo, "terceira vinda em 30 dias"). Hoje esses avisos são regras em código, testadas só com pacientes simulados; não são diagnóstico e não mudam a cor nem a pontuação.</p>
+  <p>No futuro, com a integração ao prontuário eletrônico da unidade, a IA poderá ajudar a <strong>identificar recorrências</strong>, como sintomas que se repetem entre atendimentos. Esse uso seguirá os mesmos princípios: os achados serão avisos para o profissional, com a origem de cada um, nunca diagnóstico e nunca uma mudança automática de prioridade. Ele só será ativado depois de validação clínica, aprovação ética e uma nova versão desta política.</p>
+
+  <h2 id="papeis">3. Quem é responsável pelos dados</h2>
+  <p>No uso real, a <strong>unidade de saúde</strong> (UPA, hospital ou a organização que a administra) é a <strong>controladora</strong> dos dados dos seus pacientes: é ela que decide sobre o atendimento e sobre os dados. A salUS.ia atua como <strong>operadora</strong>, tratando os dados em nome da unidade e conforme suas instruções, nos termos da Lei Geral de Proteção de Dados (Lei 13.709/2018).</p>
+  <p>As responsabilidades de cada parte serão definidas em contrato com cada unidade, antes de qualquer uso com pacientes reais.</p>
+
+  <h2 id="dados">4. Quais dados tratamos, onde ficam e por quanto tempo</h2>
+  <p>Dados de saúde são <strong>dados pessoais sensíveis</strong> (LGPD, art. 11) e recebem a proteção mais alta. A tabela descreve o funcionamento atual do sistema.</p>
+  <div class="tabela-rolagem">
+  <table class="tabela">
+    <thead><tr><th>Dado</th><th>Onde fica</th><th>Por quanto tempo</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Ficha da triagem</strong>: idade, sexo biológico, aferições (temperatura, pressão etc.) e respostas da entrevista, incluindo o relato</td><td>No computador da unidade</td><td>Enquanto o paciente está na fila, para permitir a reclassificação. Apagada 10 minutos depois de o paciente ser chamado, ou na hora se ele for retirado da fila.</td></tr>
+      <tr><td><strong>Áudio da voz</strong></td><td>Só na memória do computador, durante a transcrição</td><td>Descartado logo após a transcrição. Nunca é gravado.</td></tr>
+      <tr><td><strong>Registro da fila</strong>: número de atendimento, cor, motivo resumido, horários e quem triou, chamou ou reclassificou</td><td>No computador da unidade</td><td>Mantido para organização e auditoria do serviço. O prazo de guarda será definido com cada unidade.</td></tr>
+      <tr><td><strong>Código do QR do paciente</strong></td><td>No computador da unidade</td><td>É aleatório e não contém nome, CPF nem cartão do SUS. Deixa de funcionar 10 minutos depois de o paciente ser chamado.</td></tr>
+      <tr><td><strong>Aviso de piora</strong>: um motivo escolhido numa lista fixa, sem texto livre</td><td>No computador da unidade</td><td>Junto ao registro da fila.</td></tr>
+      <tr><td><strong>Número do prontuário</strong>, quando informado</td><td>Usado apenas para consultar o histórico</td><td>Não é guardado na ficha, na fila nem na base de pesquisa.</td></tr>
+      <tr><td><strong>Contas da equipe</strong>: login, nome e senha</td><td>No computador da unidade</td><td>A senha é guardada de forma irreversível (scrypt com sal), nunca em texto. As sessões expiram após 1 hora sem uso ou 12 horas no total.</td></tr>
+      <tr><td><strong>Base de melhoria do sistema</strong>: casos anonimizados (ver seção 10)</td><td>No computador da unidade</td><td>Ainda não há prazo de exclusão automática; ele será definido antes do uso real.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p>A página do paciente, aberta pelo QR, <strong>não usa cookies</strong> e mostra apenas a cor, o motivo em linguagem simples, uma faixa de pessoas à frente e o tempo-alvo. Ela nunca mostra a pontuação, a posição exata nem dados de outros pacientes.</p>
+
+  <h2 id="finalidade">5. Para que usamos os dados</h2>
+  <ul>
+    <li>Apoiar a classificação de risco feita pela equipe de enfermagem.</li>
+    <li>Organizar a fila de atendimento e informar o paciente sobre sua situação.</li>
+    <li>Permitir que o paciente avise que piorou e que a equipe reavalie.</li>
+    <li>Registrar quem fez cada ação, para auditoria e qualidade do serviço.</li>
+    <li><strong>Melhorar a qualidade do serviço da unidade</strong>, como descrito abaixo.</li>
+    <li>Medir e melhorar a leitura do relato, apenas com dados anonimizados (seção 10).</li>
+  </ul>
+  <h3>Melhoria da qualidade do serviço</h3>
+  <p>Os dados da fila também serão tratados para que o gestor da unidade entenda onde o atendimento trava e possa agir. Exemplos de indicadores:</p>
+  <ul>
+    <li>tempo de espera por cor, comparado com o tempo-alvo de cada cor;</li>
+    <li>horários e dias de maior movimento;</li>
+    <li>quantos pacientes de cada cor chegam por período;</li>
+    <li>tempo entre um aviso de piora e a reavaliação do paciente;</li>
+    <li>quantas vezes a equipe muda a cor sugerida pelo sistema.</li>
+  </ul>
+  <p>Regras para esse uso:</p>
+  <ul>
+    <li>O gestor vê <strong>números agregados</strong> (totais, médias, distribuições por período), nunca a ficha, o relato ou o histórico de um paciente identificado.</li>
+    <li>Os indicadores são calculados a partir do registro da fila (cor, horários e ações), e não da ficha clínica, que é apagada depois do atendimento.</li>
+    <li>Indicadores sobre a equipe servem para dimensionar o serviço (por exemplo, quantas pessoas são necessárias em cada turno), e não para punir profissionais individualmente.</li>
+    <li>Os dados ficam no computador da unidade e são da unidade; a salUS.ia não os usa para outros clientes.</li>
+  </ul>
+  <p><strong>Não usamos os dados</strong> para publicidade, para perfis de comportamento, para decisões de crédito ou seguro, nem para nenhuma finalidade que não esteja nesta lista.</p>
+
+  <h2 id="base-legal">6. Bases legais</h2>
+  <p>No uso real, o tratamento dos dados de saúde para a triagem e para a gestão da qualidade do serviço se apoiará na <strong>tutela da saúde</strong>, em procedimento realizado por profissionais e serviços de saúde (LGPD, art. 11, II, "f"). O uso de dados para pesquisa dependerá de aprovação por Comitê de Ética em Pesquisa, nos termos das Resoluções 466/2012 e 510/2016 do Conselho Nacional de Saúde, e de anonimização sempre que possível. Dados anonimizados de forma que não permita identificar a pessoa não são considerados dados pessoais (LGPD, art. 12).</p>
+  <p>As bases legais de cada uso serão confirmadas em parecer jurídico antes do primeiro piloto.</p>
+
+  <h2 id="seguranca">7. Segurança</h2>
+  <ul>
+    <li><strong>Processamento local:</strong> a triagem, a leitura do relato e a voz rodam no computador da unidade, sem depender de internet nem de serviço de nuvem.</li>
+    <li><strong>Tela da equipe isolada:</strong> só pode ser aberta no próprio computador, exige login e recusa pedidos vindos de outros sites.</li>
+    <li><strong>Página do paciente separada:</strong> responde só no Wi-Fi da unidade e só mostra o status do próprio código; a única ação possível é o aviso de piora.</li>
+    <li><strong>Senhas protegidas</strong> e bloqueio de 5 minutos após 5 tentativas erradas.</li>
+    <li><strong>Sessões que expiram</strong> com o computador parado; a atualização automática da fila não conta como uso.</li>
+    <li><strong>Testes automáticos</strong> de segurança e de entradas malformadas a cada mudança no código.</li>
+  </ul>
+  <p>Em caso de incidente de segurança com risco aos titulares, apoiaremos a unidade na comunicação à Autoridade Nacional de Proteção de Dados (ANPD) e aos afetados, como prevê a LGPD (art. 48).</p>
+
+  <h2 id="compartilhamento">8. Compartilhamento</h2>
+  <ul>
+    <li><strong>Nunca vendemos dados.</strong> A LGPD proíbe compartilhar dados de saúde para obter vantagem econômica (art. 11, § 4º), e isso também é um princípio nosso.</li>
+    <li>Os dados não saem do computador da unidade por padrão. Se a unidade configurar a leitura do relato em um servidor fora do computador, o sistema emite um alerta, e essa configuração precisa de autorização da unidade.</li>
+    <li>Só compartilharemos dados por ordem judicial ou obrigação legal, informando a unidade sempre que a lei permitir.</li>
+  </ul>
+
+  <h2 id="direitos">9. Direitos dos titulares</h2>
+  <p>Pacientes e profissionais têm os direitos previstos no art. 18 da LGPD, entre eles: confirmar se há tratamento de seus dados, acessá-los, corrigi-los, pedir sua eliminação ou anonimização quando cabível, e saber com quem foram compartilhados.</p>
+  <p>Como a unidade de saúde é a controladora, o pedido deve ser feito a ela. A salUS.ia apoiará a unidade a responder dentro do prazo. Também é possível falar conosco pelo contato da seção 13.</p>
+
+  <h2 id="pesquisa">10. Pesquisa e melhoria do sistema</h2>
+  <p>Para medir e melhorar a leitura do relato, o sistema pode guardar <strong>casos anonimizados</strong>. Eles servem só para isso: <strong>nunca</strong> são usados para mudar as regras de cor ou os pesos, que dependem de revisão clínica.</p>
+  <ul>
+    <li>Cada caso guarda o relato sem dados identificáveis, a faixa etária (e não a idade exata) e o mês (e não a data).</li>
+    <li>Não guarda nome, número de atendimento, código do QR, prontuário nem o login de quem atendeu.</li>
+    <li>CPF, cartão do SUS, telefone, e-mail, CEP, endereços, datas e nomes apresentados no texto são substituídos por marcadores automaticamente.</li>
+    <li>A anonimização automática pode falhar com nomes soltos no meio da frase. Por isso, cada caso traz uma lista de palavras suspeitas para revisão humana antes de qualquer uso.</li>
+    <li>Uma parte fixa dos casos fica reservada só para teste e nunca é usada para treinar.</li>
+    <li>A unidade pode desligar essa base a qualquer momento.</li>
+  </ul>
+  <p>Com pacientes reais, essa base continuará sendo tratada como dado sensível, e seu uso dependerá de aprovação por Comitê de Ética em Pesquisa.</p>
+
+  <h2 id="limites">11. Limitações que reconhecemos</h2>
+  <ul>
+    <li>As regras de cor, os limites e os pesos <strong>ainda não foram validados</strong> por profissional de saúde. Todas as telas avisam isso.</li>
+    <li>A salUS.ia provavelmente é um <strong>software como dispositivo médico</strong> e precisará de regularização na Anvisa antes do uso real.</li>
+    <li>A precisão da transcrição de voz ainda não foi medida de forma sistemática, nem em ambiente de unidade de saúde.</li>
+    <li>O histórico do paciente usa hoje apenas pacientes inventados; a integração com prontuários reais ainda não existe.</li>
+    <li>Ainda não definimos o prazo de guarda do registro da fila nem da base de melhoria.</li>
+    <li>O painel de indicadores para o gestor ainda não existe; ele está no roadmap.</li>
+  </ul>
+
+  <h2 id="site">12. Este site</h2>
+  <p>Este site não usa cookies, não tem rastreadores nem ferramentas de análise e não carrega fontes, imagens ou scripts de outros servidores. Nós não coletamos dados de quem o visita.</p>
+  <p>O site é hospedado no Cloudflare Pages. Como todo serviço de hospedagem, a Cloudflare processa dados técnicos de cada acesso, como o endereço IP, para entregar as páginas e proteger o site contra ataques, conforme a política de privacidade dela. Não ativamos nenhuma ferramenta de análise de visitantes.</p>
+
+  <h2 id="contato">13. Contato e atualizações</h2>
+  <p>Dúvidas, pedidos ou sugestões: <a href="mailto:startup.salus.ia@gmail.com">startup.salus.ia@gmail.com</a>. Antes do primeiro uso com pacientes reais, indicaremos aqui o encarregado pelo tratamento de dados (LGPD, art. 41).</p>
+  <p>Esta política será atualizada sempre que o sistema mudar. A data e a versão no topo indicam a revisão em vigor, e o histórico de mudanças fica no repositório público do projeto.</p>
+</main>
+
+<footer class="rodape">
+  <div class="largura">
+    <p><strong><span class="n-sal">sal</span><span class="n-us">US</span><span class="n-ia">.ia</span></strong> · transformando tecnologia em saúde · Universidade Federal de Viçosa, Campus Rio Paranaíba</p>
+    <p><a href="index.html">Página inicial</a> · <a href="mailto:startup.salus.ia@gmail.com">startup.salus.ia@gmail.com</a></p>
+  </div>
+</footer>
+</body>
+</html>

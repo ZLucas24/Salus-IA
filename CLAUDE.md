@@ -59,7 +59,7 @@ Python 3.12+. Pacote `triagem`, executado com `python -m triagem`.
   Toda rota da tela do enfermeiro exige sessão, exceto /login, o CSS e a imagem do mascote; ações na
   fila registram quem fez.
 - Marca: o nome é salUS.ia (o repositório e o pacote continuam "Salus IA"/`triagem`). Arquivos em
-  `docs/marca/` (use `logo.svg`; a imagem original traz ".ai" por engano); a paleta (azul-marinho, oliva, ferrugem, creme) está nos tokens do CSS. As cores da
+  `docs/marca/` (`logo.svg` e `mascote.jpg`); a paleta (azul-marinho, oliva, ferrugem, creme) está nos tokens do CSS. As cores da
   classificação de risco são clínicas, não são da marca, e não mudam com ela (há teste).
 - `triagem/treino.py`: base de treino SÓ do extrator (`treino.db`, fora do Git), com relato
   anonimizado e leitura crua do extrator. Nunca usar para ajustar regras ou pesos; a partição

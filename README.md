@@ -18,13 +18,37 @@ essa ficha e devolve um JSON padronizado com:
 > atendimento real. **Os limites, as regras de cor e os pesos ainda não foram revisados por
 > enfermeiro ou médico.** A decisão final é sempre do profissional de saúde.
 
+## Site e política de ética
+
+O site institucional fica em [docs/index.html](docs/index.html) (quem somos, o que fazemos, impacto
+e roadmap) e a política em [docs/politica.html](docs/politica.html) (ética no uso da IA e tratamento
+de dados, conforme a LGPD). São páginas estáticas, sem JavaScript, cookies ou recursos de outros
+servidores. A política é um **rascunho para revisão jurídica**; um teste avisa quando um prazo do
+código (por exemplo, os 10 minutos para apagar a ficha) deixa de bater com o texto.
+
+**Publicação no Cloudflare Pages** (Workers & Pages → Create → Pages → conectar ao GitHub):
+
+| Campo | Valor |
+|---|---|
+| Repositório | `ZLucas24/Salus-IA` |
+| Branch de produção | `main` |
+| Framework preset | None |
+| Build command | (vazio) |
+| Build output directory | `docs` |
+
+O site fica em um endereço `*.pages.dev` até haver domínio próprio. O arquivo
+[docs/_headers](docs/_headers) aplica cabeçalhos de segurança no Cloudflare. Atenção: tudo o que
+está em `docs/` fica acessível pelo site, inclusive o pitch, o canvas e os relatórios em PDF (que já
+são públicos no repositório).
+
+**Equipe:** Larissa Previde, Anna Cassia Alves Bueno e José Lucas Silva de Oliveira, estudantes de
+Ciência de Dados e Inteligência Artificial da Universidade Federal de Viçosa, Campus Rio Paranaíba.
+
 ## Marca
 
 O nome da startup é **salUS.ia** ("Salus IA" continua sendo o nome do repositório e do pacote Python).
-Os arquivos ficam em [docs/marca/](docs/marca/): o [logo em vetor](docs/marca/logo.svg), o
-[mascote](docs/marca/mascote.jpg) e a [imagem original do logo](docs/marca/logo_original.jpg), que serviu de
-referência para as cores (nela o nome aparece como "salUS.ai"; o nome certo é salUS.ia). A interface usa
-as cores do logo:
+Os arquivos ficam em [docs/marca/](docs/marca/): o [logo em vetor](docs/marca/logo.svg) e o
+[mascote](docs/marca/mascote.jpg). A interface usa as cores do logo:
 
 | Cor | Código | Onde aparece |
 |---|---|---|
